@@ -1,0 +1,13 @@
+script_settings:
+  interval: 12   # Time between shots in seconds
+  frames: 1000    # Total number of frames to capture
+
+camera_settings:
+  iso: '1600'
+  whitebalance: 'Auto'
+  shutterspeed: '8'
+  aperture: '4.5'
+#   shutterspeed: '1/125'
+#   aperture: '4.5'
+  focusmode: 'Manual'
+    #focusmode: 'AI Focus'

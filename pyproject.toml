@@ -1,0 +1,12 @@
+[project]
+name = "timelapy"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.1.7",
+    "gphoto2>=2.5.0",
+    "pyyaml>=6.0.2",
+    "ruff>=0.6.7",
+]
