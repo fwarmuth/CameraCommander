@@ -1,6 +1,6 @@
 # CameraComander
 
-A CLi application for creating time-lapse videos using a gphoto2 compatiable camera. So far only tested with a Canon EOS 6D2 and EOS R50 tethered (USB).
+A CLI application for creating time-lapse videos using a gphoto2 compatiable camera. So far only tested with a Canon EOS 6D2 and EOS R50 tethered (USB).
 The application allows you to configure camera settings utilizing a file which makes it easier to reproduce captures.
 Main function is to capture snapshots and start time lapse recordings, by continuously capturing images at a given interval. The images are saved to a folder and can be used to create a time-lapse videos, e.g. using ffmpeg.
 
@@ -19,13 +19,16 @@ camera_settings:
 ```
 
 ## Example Workflow (timelapse)
-1.  Connect Camera via USB
+1. Connect Camera via USB
 2. Run `cameracommander auto_adjust --save-settings` to detect camera settings and save them to `settings.yaml`
 3. Modify `settings.yaml` to your needs
 4. Run `cameracommander timelapse --settings-file path/to/settings.yaml` to start a timelapse
 5. Use ffmpeg to create a video from the images
 
+Here is one example result of a timelapse created with this tool without any post processing:
+
 ![Example](docs/nothernlights.gif)
+
 
 ## Commands
 
@@ -68,12 +71,12 @@ $ cameracommander auto_adjust [--save-settings]
 ```
 
 ## How to install
-### From Source
-This project uses uv as a package manager. So install it first.
+### From Source, in a venv
+This project uses uv as a package manager. So install it first -> https://docs.astral.sh/uv/getting-started/installation/)
 
 Then:
 ```sh
-$ git clone
+$ git clone https://github.com/fwarmuth/CameraCommander.git
 $ cd CameraCommander
 $ uv run cameracommander --help
 ```
@@ -83,3 +86,4 @@ $ uv run cameracommander --help
 $ pip install cameracommander
 $ cameracommander --help
 ```
+
