@@ -74,6 +74,11 @@ $ cameracommander auto_adjust [--save-settings]
 ### From Source, in a venv
 This project uses uv as a package manager. So install it first -> https://docs.astral.sh/uv/getting-started/installation/)
 
+#### Prerequirements
+```
+apt install gphoto2-dev
+```
+
 Then:
 ```sh
 $ git clone https://github.com/fwarmuth/CameraCommander.git
