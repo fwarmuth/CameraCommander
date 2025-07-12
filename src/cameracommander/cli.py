@@ -10,7 +10,8 @@ from .camera import (
     exit_camera,
     validate_settings,
     set_camera_settings_to_auto,
-    get_current_camera_settings
+    get_current_camera_settings,
+    get_battery_level,
 )
 
 @click.group()
@@ -76,9 +77,9 @@ def snapshot(settings_file, long_exposure):
     try:
         settings = load_settings(settings_file)
         camera_settings = settings.get('camera_settings', {})
-        from camera import get_battery_level
         camera = init_camera()
-        get_battery_level(camera)
+        battery_level = get_battery_level(camera)
+        click.echo(f"Battery level: {battery_level}")
         set_camera_settings(camera, camera_settings)
         capture_image(camera, 'snapshot.jpg', long_exposure=long_exposure)
         exit_camera(camera)
@@ -141,4 +142,3 @@ def auto_adjust(save_settings):
 
 if __name__ == '__main__':
     cli()
-
