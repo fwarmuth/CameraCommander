@@ -8,7 +8,8 @@ class Tripod:
     Handles serial communication with the ESP8266 and movement calculations.
     """
     def __init__(self, pan_start, pan_end, tilt_start, tilt_end, frames,
-                 port=None, movement_mode="incremental", settle_time=1.0):
+                 port=None, movement_mode="incremental", settle_time=1.0,
+                 microstep_resolution='1/16', command_timeout=10.0):
         """
         Initialize the Tripod controller.
         :param pan_start: Start angle for pan axis (degrees).
@@ -19,6 +20,8 @@ class Tripod:
         :param port: Serial port device (e.g. '/dev/ttyUSB0' or 'COM3'). If None or 'auto', auto-detect will be used.
         :param movement_mode: 'incremental' or 'continuous'.
         :param settle_time: Extra wait time (seconds) after each move to let vibrations settle.
+        :param microstep_resolution: The microstep resolution, one of ['full', '1/2', '1/4', '1/8', '1/16'].
+        :param command_timeout: The timeout in seconds to wait for a command to complete.
         """
         self.pan_start = pan_start
         self.pan_end = pan_end
@@ -27,6 +30,8 @@ class Tripod:
         self.frames = frames
         self.movement_mode = movement_mode.lower()
         self.settle_time = settle_time
+        self.microstep_resolution = microstep_resolution
+        self.command_timeout = command_timeout
         # Calculate per-frame step increments for incremental mode
         if frames > 1:
             self.pan_step = (pan_end - pan_start) / float(frames - 1)
@@ -80,6 +85,20 @@ class Tripod:
             return ports[0].device
         return None
 
+    def _set_microstep_resolution(self):
+        resolution_map = {
+            'full': '1',
+            '1/2': '2',
+            '1/4': '4',
+            '1/8': '8',
+            '1/16': '6'  # Special case for 1/16
+        }
+        command = resolution_map.get(self.microstep_resolution)
+        if command:
+            self._send_command(command)
+        else:
+            print(f"[Tripod] Warning: Invalid microstep resolution: {self.microstep_resolution}")
+
     def _send_command(self, command, wait_for_ack=True):
         """
         Send a command string to the tripod and optionally wait for the "DONE" acknowledgment.
@@ -100,7 +119,7 @@ class Tripod:
             # Wait for response until timeout
             start_time = time.time()
             response = b""
-            while time.time() - start_time < 10.0:  # up to 10 seconds per move (adjustable)
+            while time.time() - start_time < self.command_timeout:  # up to command_timeout seconds per move (adjustable)
                 if self.serial.in_waiting:
                     line = self.serial.readline()
                     if line:
@@ -113,9 +132,9 @@ class Tripod:
                 except UnicodeDecodeError:
                     resp_text = ""
                 resp_text = resp_text.strip()
-                # If the response starts with "DONE", we consider it a successful ack.
-                # (It might be "DONE 45.0 10.0" including positions, which is fine.)
-                if resp_text.upper().startswith("DONE"):
+                # If the response starts with "DONE" or "OK", we consider it a successful ack.
+                # (It might be "DONE 45.0 10.0" or "OK MICROSTEP 16" including positions, which is fine.)
+                if resp_text.upper().startswith("DONE") or resp_text.upper().startswith("OK"):
                     # Acknowledge received
                     return True
                 elif resp_text.upper().startswith("ERR"):
@@ -148,6 +167,8 @@ class Tripod:
         delta_tilt = self.tilt_start  # current_tilt 0
         if abs(delta_pan) < 1e-6 and abs(delta_tilt) < 1e-6:
             return  # already at start (no move needed)
+        # Set microstep resolution before moving
+        self._set_microstep_resolution()
         # Send move command to reach start position
         cmd = f"M {delta_pan:.3f} {delta_tilt:.3f}"
         print(f"[Tripod] Moving to start position: pan={self.pan_start}°, tilt={self.tilt_start}°")
@@ -167,6 +188,8 @@ class Tripod:
         """
         if self.movement_mode != "continuous":
             return False
+        # Set microstep resolution before moving
+        self._set_microstep_resolution()
         # Calculate the full range to move
         total_pan = self.pan_end - self.pan_start
         total_tilt = self.tilt_end - self.tilt_start
@@ -187,6 +210,8 @@ class Tripod:
         """
         if self.movement_mode != "incremental":
             return False
+        # Set microstep resolution before moving
+        self._set_microstep_resolution()
         # Compute the next target (for logging)
         next_pan = self.current_pan + self.pan_step
         next_tilt = self.current_tilt + self.tilt_step
