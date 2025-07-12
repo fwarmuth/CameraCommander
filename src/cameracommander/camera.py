@@ -4,6 +4,7 @@ import gphoto2 as gp
 import os
 import time
 import sys
+from . import logger
 
 def init_camera():
     camera = gp.Camera()
@@ -84,15 +85,15 @@ def set_camera_settings(camera, settings):
             if widget.get_type() == gp.GP_WIDGET_MENU:
                 choices = [widget.get_choice(i) for i in range(widget.count_choices())]
                 if value not in choices:
-                    print(f"Invalid value '{value}' for {key}. Available choices are: {choices}")
+                    logger.warning(f"Invalid value '{value}' for {key}. Available choices are: {choices}")
                     continue
             widget.set_value(value)
             camera.set_config(config)
-            print(f"Set {key} to {value}")
+            logger.info(f"Set {key} to {value}")
         except gp.GPhoto2Error as e:
-            print(f"Failed to set {key} to {value}: {e}")
+            logger.error(f"Failed to set {key} to {value}: {e}")
         except Exception as e:
-            print(f"Error setting {key}: {e}")
+            logger.error(f"Error setting {key}: {e}")
 
 def validate_settings(camera, settings):
     config = camera.get_config()
@@ -149,11 +150,11 @@ def capture_image(camera, filename, long_exposure=None):
         # Set the camera to Bulb mode
         set_camera_settings(camera, {'shutterspeed': 'bulb'})
         # Start the exposure by setting eosremoterelease to 'Press Full'
-        print(f"Starting long exposure for {long_exposure} seconds...")
+        logger.info(f"Starting long exposure for {long_exposure} seconds...")
         set_camera_settings(camera, {'eosremoterelease': 'Press Full'})
         countdown_timer(long_exposure)
         # End the exposure by setting eosremoterelease to 'Release Full'
-        print("Ending long exposure.")
+        logger.info("Ending long exposure.")
         set_camera_settings(camera, {'eosremoterelease': 'Release Full'})
         # Wait for the camera to process the image
         time.sleep(2)
@@ -171,7 +172,7 @@ def capture_image(camera, filename, long_exposure=None):
     # Save the image to local disk
     target = os.path.join(os.getcwd(), filename)
     camera_file.save(target)
-    print(f"Image saved to {target}")
+    logger.info(f"Image saved to {target}")
     return target
 
 def start_timelapse(camera, script_settings):
@@ -183,24 +184,24 @@ def start_timelapse(camera, script_settings):
     target_path = os.path.join(target_path, f"timelapse_{time.strftime('%Y%m%d_%H%M%S')}")
     if not os.path.exists(target_path):
         os.makedirs(target_path, exist_ok=True)
-        print(f"Created target directory: {target_path}")
+        logger.info(f"Created target directory: {target_path}")
     if duration is not None:
         duration_seconds = duration * 3600  # Convert hours to seconds
         total_time = 0
     # Time-lapse capture
-    print("Starting time-lapse capture...")
+    logger.info("Starting time-lapse capture...")
     for i in range(frames):
         start_time = time.time()
         if duration is not None and total_time >= duration_seconds:
-            print("Reached duration limit.")
+            logger.info("Reached duration limit.")
             break
         # Create unique filename
         filename = os.path.join(target_path, f"image_{i+1:04d}.jpg")
         try:
             capture_image(camera, filename)
-            print(f"Captured {filename}")
+            logger.info(f"Captured {filename}")
         except Exception as e:
-            print(f"Failed to capture image: {e}")
+            logger.error(f"Failed to capture image: {e}")
             continue
         if i < frames - 1:
             # Wait for the interval - time taken to capture the image
@@ -208,13 +209,13 @@ def start_timelapse(camera, script_settings):
             if elapsed_time < interval:
                 time.sleep(interval - elapsed_time)
             else:
-                print(f"Warning: Image capture took longer than the interval.")
+                logger.warning(f"Warning: Image capture took longer than the interval.")
             if duration is not None:
                 total_time += interval
         if i % 5 == 0:
             battery_level = get_battery_level(camera)
-            print(f"Battery Level: {battery_level}")
-    print("Time-lapse capture completed.")
+            logger.info(f"Battery Level: {battery_level}")
+    logger.info("Time-lapse capture completed.")
 
 def set_camera_settings_to_auto(camera):
     config = camera.get_config()
@@ -226,7 +227,7 @@ def set_camera_settings_to_auto(camera):
                 if 'Auto' in choices:
                     child.set_value('Auto')
                     camera.set_config(config)
-                    print(f"Set {child.get_name()} to Auto")
+                    logger.info(f"Set {child.get_name()} to Auto")
             recurse_and_set_auto(child)
     recurse_and_set_auto(config)
 
@@ -262,18 +263,18 @@ def start_timelapse_with_tripod(camera, tripod, script_settings):
     target_path = os.path.join(target_path, f"timelapse_{time.strftime('%Y%m%d_%H%M%S')}")
     if not os.path.exists(target_path):
         os.makedirs(target_path, exist_ok=True)
-        print(f"Created target directory: {target_path}")
+        logger.info(f"Created target directory: {target_path}")
 
     if duration is not None:
         duration_seconds = duration * 3600  # Convert hours to seconds
         total_time = 0
 
     # Time-lapse capture with tripod movement
-    print("Starting time-lapse capture with tripod movement...")
+    logger.info("Starting time-lapse capture with tripod movement...")
     for i in range(frames):
         start_time = time.time()
         if duration is not None and total_time >= duration_seconds:
-            print("Reached duration limit.")
+            logger.info("Reached duration limit.")
             break
 
         # Move tripod
@@ -286,9 +287,9 @@ def start_timelapse_with_tripod(camera, tripod, script_settings):
         filename = os.path.join(target_path, f"image_{i+1:04d}.jpg")
         try:
             capture_image(camera, filename)
-            print(f"Captured {filename}")
+            logger.info(f"Captured {filename}")
         except Exception as e:
-            print(f"Failed to capture image: {e}")
+            logger.error(f"Failed to capture image: {e}")
             continue
 
         if i < frames - 1:
@@ -297,13 +298,13 @@ def start_timelapse_with_tripod(camera, tripod, script_settings):
             if elapsed_time < interval:
                 time.sleep(interval - elapsed_time)
             else:
-                print(f"Warning: Image capture and tripod movement took longer than the interval.")
+                logger.warning(f"Warning: Image capture and tripod movement took longer than the interval.")
             if duration is not None:
                 total_time += interval
 
         if i % 5 == 0:
             battery_level = get_battery_level(camera)
-            print(f"Battery Level: {battery_level}")
+            logger.info(f"Battery Level: {battery_level}")
 
-    print("Time-lapse capture with tripod movement completed.")
+    logger.info("Time-lapse capture with tripod movement completed.")
 

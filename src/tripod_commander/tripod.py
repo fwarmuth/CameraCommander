@@ -1,6 +1,7 @@
 import time
 import serial
 from serial.tools import list_ports
+from . import logger
 
 class Tripod:
     """
@@ -60,7 +61,7 @@ class Tripod:
         # Flush any initial data (e.g., startup messages) from buffer
         time.sleep(2)  # give some time for serial to initialize
         self.serial.reset_input_buffer()
-        print(f"[Tripod] Connected to serial port: {port}")
+        logger.info(f"Connected to serial port: {port}")
 
         # Optionally, ensure drivers are enabled (if firmware requires). For example:
         # self.serial.write(b"e\n")  # 'e' command from firmware to enable motors.
@@ -97,7 +98,7 @@ class Tripod:
         if command:
             self._send_command(command)
         else:
-            print(f"[Tripod] Warning: Invalid microstep resolution: {self.microstep_resolution}")
+            logger.warning(f"Invalid microstep resolution: {self.microstep_resolution}")
 
     def _send_command(self, command, wait_for_ack=True):
         """
@@ -142,9 +143,9 @@ class Tripod:
                     raise RuntimeError(f"Tripod error response: {resp_text}")
                 # If some other unexpected text, ignore and continue waiting (it might be initial banner or info).
             # If no response or no "DONE" within timeout:
-            print(f"[Tripod] No ack for command '{command}' (attempt {attempt}).")
+            logger.warning(f"No ack for command '{command}' (attempt {attempt}).")
             if attempt < max_retries:
-                print("[Tripod] Retrying command...")
+                logger.info("Retrying command...")
                 # Perhaps send a stop to clear any motion before retrying
                 try:
                     self.serial.write(b"X\n")  # stop any ongoing motion
@@ -171,7 +172,7 @@ class Tripod:
         self._set_microstep_resolution()
         # Send move command to reach start position
         cmd = f"M {delta_pan:.3f} {delta_tilt:.3f}"
-        print(f"[Tripod] Moving to start position: pan={self.pan_start}°, tilt={self.tilt_start}°")
+        logger.info(f"Moving to start position: pan={self.pan_start}°, tilt={self.tilt_start}°")
         self._send_command(cmd, wait_for_ack=True)
         # Update current known position
         self.current_pan = self.pan_start
@@ -179,7 +180,7 @@ class Tripod:
         # Allow a brief moment for settling (if needed)
         if self.settle_time > 0:
             time.sleep(self.settle_time)
-        print("[Tripod] Reached start position.")
+        logger.info("Reached start position.")
 
     def start_continuous_move(self):
         """
@@ -196,7 +197,7 @@ class Tripod:
         # Issue one move command for the full range. 
         # The tripod will execute this over time. We do not wait for "DONE" here.
         cmd = f"M {total_pan:.3f} {total_tilt:.3f}"
-        print(f"[Tripod] Starting continuous move: pan_delta={total_pan}°, tilt_delta={total_tilt}°")
+        logger.info(f"Starting continuous move: pan_delta={total_pan}°, tilt_delta={total_tilt}°")
         success = self._send_command(cmd, wait_for_ack=False)
         if not success:
             raise RuntimeError("Failed to start continuous movement on tripod.")
@@ -217,7 +218,7 @@ class Tripod:
         next_tilt = self.current_tilt + self.tilt_step
         # Command the relative move by one step size
         cmd = f"M {self.pan_step:.3f} {self.tilt_step:.3f}"
-        print(f"[Tripod] Moving to next position: pan->{next_pan:.3f}°, tilt->{next_tilt:.3f}° (delta step)")
+        logger.info(f"Moving to next position: pan->{next_pan:.3f}°, tilt->{next_tilt:.3f}° (delta step)")
         self._send_command(cmd, wait_for_ack=True)
         # Update current position
         self.current_pan = next_pan
@@ -239,4 +240,12 @@ class Tripod:
             time.sleep(0.5)
             self.serial.close()
             self.serial = None
-            print("[Tripod] Disconnected from tripod.")
+            logger.info("Disconnected from tripod.")
+
+    def __enter__(self):
+        self.connect()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.disconnect()
+        return False  # Do not suppress exceptions

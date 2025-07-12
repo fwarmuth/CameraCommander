@@ -1,10 +1,13 @@
 import click
 from .tripod import Tripod
+from . import logger
+
 
 @click.group()
 def cli():
     """Tripod Commander CLI"""
     pass
+
 
 @cli.command()
 @click.option(
@@ -29,20 +32,21 @@ def test_connection(serial_port):
         tripod.connect()
 
         # Send the version request
-        click.echo("[Tripod] Requesting firmware version…")
+        logger.info("[Tripod] Requesting firmware version…")
         tripod.serial.write(b"V\n")
         tripod.serial.flush()
 
         # Wait up to 2 seconds for a line of response
         line = tripod.serial.readline().decode('ascii', errors='ignore').strip()
         if line:
-            click.echo(f"✅ Tripod firmware responded: {line}")
+            logger.info(f"✅ Tripod firmware responded: {line}")
         else:
-            click.echo("❌ No response received (timeout).")
+            logger.warning("❌ No response received (timeout).")
 
         tripod.disconnect()
     except Exception as e:
-        click.echo(f"❌ Connection test failed: {e}")
+        logger.error(f"❌ Connection test failed: {e}")
+
 
 @cli.command()
 @click.option(
@@ -78,13 +82,14 @@ def move(serial_port, pan, tilt):
         tripod.connect()
 
         cmd = f"M {pan:.3f} {tilt:.3f}"
-        click.echo(f"[Tripod] Sending move command: {cmd}")
+        logger.info(f"[Tripod] Sending move command: {cmd}")
         tripod._send_command(cmd, wait_for_ack=True)
 
-        click.echo(f"✅ Move to pan={pan}°, tilt={tilt}° completed.")
+        logger.info(f"✅ Move to pan={pan}°, tilt={tilt}° completed.")
         tripod.disconnect()
     except Exception as e:
-        click.echo(f"❌ Movement failed: {e}")
+        logger.error(f"❌ Movement failed: {e}")
+
 
 if __name__ == '__main__':
     cli()
