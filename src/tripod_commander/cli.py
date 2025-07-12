@@ -70,7 +70,7 @@ def move(serial_port, pan, tilt):
         tripod = Tripod(
             pan_start=0.0, pan_end=0.0,
             tilt_start=0.0, tilt_end=0.0,
-            frames=1,
+            frames=10,
             port=serial_port,
             movement_mode='incremental',
             settle_time=0.5

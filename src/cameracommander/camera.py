@@ -253,3 +253,57 @@ def get_battery_level(camera):
     battery_level = battery_widget.get_value()
     return battery_level
 
+def start_timelapse_with_tripod(camera, tripod, script_settings):
+    interval = script_settings.get('interval', 10)
+    frames = script_settings.get('frames', 10)
+    duration = script_settings.get('duration', None)
+    target_path = script_settings.get('target_path', os.getcwd())
+    # Create target directory with timestamp
+    target_path = os.path.join(target_path, f"timelapse_{time.strftime('%Y%m%d_%H%M%S')}")
+    if not os.path.exists(target_path):
+        os.makedirs(target_path, exist_ok=True)
+        print(f"Created target directory: {target_path}")
+
+    if duration is not None:
+        duration_seconds = duration * 3600  # Convert hours to seconds
+        total_time = 0
+
+    # Time-lapse capture with tripod movement
+    print("Starting time-lapse capture with tripod movement...")
+    for i in range(frames):
+        start_time = time.time()
+        if duration is not None and total_time >= duration_seconds:
+            print("Reached duration limit.")
+            break
+
+        # Move tripod
+        if tripod.movement_mode == "incremental":
+            tripod.move_incremental_step()
+        elif tripod.movement_mode == "continuous" and i == 0:
+            tripod.start_continuous_move()
+
+        # Create unique filename
+        filename = os.path.join(target_path, f"image_{i+1:04d}.jpg")
+        try:
+            capture_image(camera, filename)
+            print(f"Captured {filename}")
+        except Exception as e:
+            print(f"Failed to capture image: {e}")
+            continue
+
+        if i < frames - 1:
+            # Wait for the interval - time taken to capture the image
+            elapsed_time = time.time() - start_time
+            if elapsed_time < interval:
+                time.sleep(interval - elapsed_time)
+            else:
+                print(f"Warning: Image capture and tripod movement took longer than the interval.")
+            if duration is not None:
+                total_time += interval
+
+        if i % 5 == 0:
+            battery_level = get_battery_level(camera)
+            print(f"Battery Level: {battery_level}")
+
+    print("Time-lapse capture with tripod movement completed.")
+

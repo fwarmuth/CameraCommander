@@ -12,7 +12,9 @@ from .camera import (
     set_camera_settings_to_auto,
     get_current_camera_settings,
     get_battery_level,
+    start_timelapse_with_tripod,
 )
+from tripod_commander.tripod import Tripod
 
 @click.group()
 def cli():
@@ -139,6 +141,50 @@ def auto_adjust(save_settings):
             click.echo("Settings saved to 'settings.yaml'.")
     except Exception as e:
         click.echo(f"Auto-adjust failed: {e}")
+
+@cli.command()
+@click.option('--settings-file', default='settings.yaml', help='Path to the settings YAML file.')
+def timelapse_tripod(settings_file):
+    """Start a timelapse with tripod movement using settings in settings.yaml."""
+    try:
+        settings = load_settings(settings_file)
+        script_settings = settings.get('script_settings', {})
+        camera_settings = settings.get('camera_settings', {})
+        tripod_settings = settings.get('tripod_settings', {})
+
+        camera = init_camera()
+        set_camera_settings(camera, camera_settings)
+
+        tripod = Tripod(
+            pan_start=tripod_settings.get('pan_start', 0),
+            pan_end=tripod_settings.get('pan_end', 0),
+            tilt_start=tripod_settings.get('tilt_start', 0),
+            tilt_end=tripod_settings.get('tilt_end', 0),
+            frames=script_settings.get('frames', 10),
+            port=tripod_settings.get('port', 'auto'),
+            movement_mode=tripod_settings.get('movement_mode', 'incremental'),
+            settle_time=tripod_settings.get('settle_time', 1.0),
+            microstep_resolution=tripod_settings.get('microstep_resolution', '1/16'),
+            command_timeout=tripod_settings.get('command_timeout', 10.0)
+        )
+        tripod.connect()
+
+        # Take test shot
+        capture_image(camera, 'snapshot.jpg')
+        proceed = click.prompt("Check the test image (snapshot.jpg). Do you want to proceed? (y/n)", default='n')
+        if proceed.lower() != 'y':
+            click.echo("Exiting.")
+            exit_camera(camera)
+            tripod.disconnect()
+            return
+
+        # Start timelapse with tripod
+        start_timelapse_with_tripod(camera, tripod, script_settings)
+
+        exit_camera(camera)
+        tripod.disconnect()
+    except Exception as e:
+        click.echo(f"Timelapse with tripod failed: {e}")
 
 if __name__ == '__main__':
     cli()
