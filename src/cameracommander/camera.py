@@ -165,7 +165,18 @@ def capture_image(camera, filename, long_exposure=None):
         file_path = event_data
     else:
         # Regular capture
-        file_path = camera.capture(gp.GP_CAPTURE_IMAGE)
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                file_path = camera.capture(gp.GP_CAPTURE_IMAGE)
+                break
+            except gp.GPhoto2Error as e:
+                logger.warning(f"Attempt {attempt + 1} to capture image failed: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(1)  # Wait for 1 second before retrying
+                else:
+                    logger.error(f"Failed to capture image after {max_retries} attempts.")
+                    raise  # Re-raise the last exception if all retries fail
     # Get the image file
     camera_file = camera.file_get(
         file_path.folder, file_path.name, gp.GP_FILE_TYPE_NORMAL)
@@ -209,7 +220,7 @@ def start_timelapse(camera, script_settings):
             if elapsed_time < interval:
                 time.sleep(interval - elapsed_time)
             else:
-                logger.warning(f"Warning: Image capture took longer than the interval.")
+                logger.warning("Warning: Image capture took longer than the interval.")
             if duration is not None:
                 total_time += interval
         if i % 5 == 0:
@@ -238,7 +249,6 @@ def get_current_camera_settings(camera):
         for child in widget.get_children():
             name = child.get_name()
             child_path = f"{path}/{name}" if path else name
-            widget_type = child.get_type()
             try:
                 value = child.get_value()
                 settings[child_path] = value
@@ -279,7 +289,7 @@ def start_timelapse_with_tripod(camera, tripod, script_settings):
 
         # Move tripod
         if tripod.movement_mode == "incremental":
-            tripod.move_incremental_step()
+            tripod.move_incremental_step(i)
         elif tripod.movement_mode == "continuous" and i == 0:
             tripod.start_continuous_move()
 
@@ -298,7 +308,7 @@ def start_timelapse_with_tripod(camera, tripod, script_settings):
             if elapsed_time < interval:
                 time.sleep(interval - elapsed_time)
             else:
-                logger.warning(f"Warning: Image capture and tripod movement took longer than the interval.")
+                logger.warning("Warning: Image capture and tripod movement took longer than the interval.")
             if duration is not None:
                 total_time += interval
 
