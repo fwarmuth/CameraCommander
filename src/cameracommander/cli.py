@@ -161,10 +161,7 @@ def timelapse_tripod(settings_file):
         camera_settings = settings.get('camera_settings', {})
         tripod_settings = settings.get('tripod_settings', {})
 
-        camera = init_camera()
-        set_camera_settings(camera, camera_settings)
-
-        tripod = Tripod(
+        with Tripod(
             pan_start=tripod_settings.get('pan_start', 0),
             pan_end=tripod_settings.get('pan_end', 0),
             tilt_start=tripod_settings.get('tilt_start', 0),
@@ -175,23 +172,26 @@ def timelapse_tripod(settings_file):
             settle_time=tripod_settings.get('settle_time', 1.0),
             microstep_resolution=tripod_settings.get('microstep_resolution', '1/16'),
             command_timeout=tripod_settings.get('command_timeout', 10.0)
-        )
-        tripod.connect()
+        ) as tripod:
+            camera = init_camera()
+            set_camera_settings(camera, camera_settings)
 
-        # Take test shot
-        capture_image(camera, 'snapshot.jpg')
-        proceed = click.prompt("Check the test image (snapshot.jpg). Do you want to proceed? (y/n)", default='n')
-        if proceed.lower() != 'y':
-            logger.info("Exiting.")
+            # Take test shot
+            go = False
+            while not go:
+                capture_image(camera, 'snapshot.jpg')
+                proceed = click.prompt("Check the test image (snapshot.jpg). Do you want to proceed? (y/n/q)", default='n')
+                if proceed.lower() == 'q':
+                    logger.info("Exiting.")
+                    exit_camera(camera)
+                    return
+                if proceed.lower() == 'y':
+                    go = True
+            # Start timelapse with tripod
+            start_timelapse_with_tripod(camera, tripod, script_settings)
+
             exit_camera(camera)
-            tripod.disconnect()
-            return
 
-        # Start timelapse with tripod
-        start_timelapse_with_tripod(camera, tripod, script_settings)
-
-        exit_camera(camera)
-        tripod.disconnect()
     except Exception as e:
         logger.error(f"Timelapse with tripod failed: {e}")
 
