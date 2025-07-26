@@ -1,21 +1,8 @@
 import click
-from .settings import load_settings, save_settings
-from .camera import (
-    list_all_camera_settings,
-    get_setting_valid_values,
-    capture_image,
-    set_camera_settings,
-    start_timelapse,
-    init_camera,
-    exit_camera,
-    validate_settings,
-    set_camera_settings_to_auto,
-    get_current_camera_settings,
-    get_battery_level,
-    start_timelapse_with_tripod,
-)
+from cameracommander.settings import load_settings, save_settings
+from cameracommander.camera import Camera
 from tripod_commander.tripod import Tripod
-from . import logger
+from cameracommander import logger
 
 
 @click.group()
@@ -31,9 +18,8 @@ def check_settings(settings_file):
     try:
         settings = load_settings(settings_file)
         camera_settings = settings.get('camera_settings', {})
-        camera = init_camera()
-        validate_settings(camera, camera_settings)
-        exit_camera(camera)
+        with Camera() as camera:
+            camera.validate_settings(camera_settings)
         logger.info("Settings are valid.")
     except Exception as e:
         logger.error(f"Settings validation failed: {e}")
@@ -43,9 +29,8 @@ def check_settings(settings_file):
 def list_settings():
     """Show all possible camera settings and their keys."""
     try:
-        camera = init_camera()
-        settings = list_all_camera_settings(camera)
-        exit_camera(camera)
+        with Camera() as camera:
+            settings = camera.list_all_camera_settings()
         for path, info in settings.items():
             logger.info(f"{path}: {info['label']} (Type: {info['type']})")
     except Exception as e:
@@ -59,20 +44,19 @@ def list_available_values(settings_file):
     try:
         settings = load_settings(settings_file)
         camera_settings = settings.get('camera_settings', {})
-        camera = init_camera()
-        for key in camera_settings.keys():
-            valid_values = get_setting_valid_values(camera, key)
-            if valid_values is not None:
-                logger.info(f"\nSetting '{key}' valid values:")
-                if isinstance(valid_values, list):
-                    for val in valid_values:
-                        logger.info(f"  - {val}")
-                elif isinstance(valid_values, tuple):
-                    min_value, max_value, increment = valid_values
-                    logger.info(f"  Range: {min_value} to {max_value}, increment: {increment}")
-            else:
-                logger.warning(f"Setting '{key}' valid values not available.")
-        exit_camera(camera)
+        with Camera() as camera:
+            for key in camera_settings.keys():
+                valid_values = camera.get_setting_valid_values(key)
+                if valid_values is not None:
+                    logger.info(f"\nSetting '{key}' valid values:")
+                    if isinstance(valid_values, list):
+                        for val in valid_values:
+                            logger.info(f"  - {val}")
+                    elif isinstance(valid_values, tuple):
+                        min_value, max_value, increment = valid_values
+                        logger.info(f"  Range: {min_value} to {max_value}, increment: {increment}")
+                else:
+                    logger.warning(f"Setting '{key}' valid values not available.")
     except Exception as e:
         logger.error(f"Failed to list available values: {e}")
 
@@ -85,12 +69,11 @@ def snapshot(settings_file, long_exposure):
     try:
         settings = load_settings(settings_file)
         camera_settings = settings.get('camera_settings', {})
-        camera = init_camera()
-        battery_level = get_battery_level(camera)
-        logger.info(f"Battery level: {battery_level}")
-        set_camera_settings(camera, camera_settings)
-        capture_image(camera, 'snapshot.jpg', long_exposure=long_exposure)
-        exit_camera(camera)
+        with Camera() as camera:
+            battery_level = camera.get_battery_level()
+            logger.info(f"Battery level: {battery_level}")
+            camera.set_camera_settings(camera_settings)
+            camera.capture_image('snapshot.jpg', long_exposure=long_exposure)
         logger.info("Snapshot taken and saved as 'snapshot.jpg'.")
     except Exception as e:
         logger.error(f"Failed to take snapshot: {e}")
@@ -98,28 +81,44 @@ def snapshot(settings_file, long_exposure):
 
 @cli.command()
 @click.option('--settings-file', default='settings.yaml', help='Path to the settings YAML file.')
-def timelapse(settings_file):
+@click.option('--tripod', is_flag=True, help='Enable tripod mode.')
+def timelapse(settings_file, tripod):
     """Start a timelapse using settings in settings.yaml."""
     try:
         settings = load_settings(settings_file)
         script_settings = settings.get('script_settings', {})
         camera_settings = settings.get('camera_settings', {})
-        try:
-            camera = init_camera()
-        except Exception as e:
-            raise Exception(f"Init camera failed: {e}")
-        set_camera_settings(camera, camera_settings)
-        # Take test shot
-        capture_image(camera, 'snapshot.jpg')
-        # Downsampling the image for web display 800x600
-        proceed = click.prompt("Check the test image (test_image.jpg). Do you want to proceed? (y/n)", default='n')
-        if proceed.lower() != 'y':
-            logger.info("Exiting.")
-            exit_camera(camera)
-            return
-        # Start timelapse
-        start_timelapse(camera, script_settings)
-        exit_camera(camera)
+        tripod_settings = settings.get('tripod_settings', {}) if tripod else None
+
+        with Camera() as camera:
+            camera.set_camera_settings(camera_settings)
+            proceed = 'n'
+            while proceed == 'n':
+                # Take test shot
+                camera.capture_image('snapshot.jpg')
+                # Downsampling the image for web display 800x600
+                proceed = click.prompt("Check the test image (test_image.jpg). Do you want to proceed? (y/n/q)", default='n')
+                if proceed.lower() == 'q':
+                    logger.info("Exiting.")
+                    return
+
+            if tripod:
+                with Tripod(
+                    pan_start=tripod_settings.get('pan_start', 0),
+                    pan_end=tripod_settings.get('pan_end', 0),
+                    tilt_start=tripod_settings.get('tilt_start', 0),
+                    tilt_end=tripod_settings.get('tilt_end', 0),
+                    frames=script_settings.get('frames', 10),
+                    port=tripod_settings.get('port', 'auto'),
+                    movement_mode=tripod_settings.get('movement_mode', 'incremental'),
+                    settle_time=tripod_settings.get('settle_time', 1.0),
+                    microstep_resolution=tripod_settings.get('microstep_resolution', '1/16'),
+                    command_timeout=tripod_settings.get('command_timeout', 10.0)
+                ) as tripod_device:
+                    camera.start_timelapse(script_settings, tripod=tripod_device)
+            else:
+                camera.start_timelapse(script_settings)
+
     except Exception as e:
         logger.error(f"Timelapse failed: {e}")
 
@@ -129,11 +128,10 @@ def timelapse(settings_file):
 def auto_adjust(save_settings_flag):
     """Take a snapshot with all auto settings and print the used camera settings."""
     try:
-        camera = init_camera()
-        set_camera_settings_to_auto(camera)
-        capture_image(camera, 'auto_adjust_snapshot.jpg')
-        current_settings = get_current_camera_settings(camera)
-        exit_camera(camera)
+        with Camera() as camera:
+            camera.set_camera_settings_to_auto()
+            camera.capture_image('auto_adjust_snapshot.jpg')
+            current_settings = camera.get_current_camera_settings()
         logger.info("Current Camera Settings:")
         for key, value in current_settings.items():
             logger.info(f"{key}: {value}")
@@ -149,51 +147,6 @@ def auto_adjust(save_settings_flag):
             logger.info("Settings saved to 'settings.yaml'.")
     except Exception as e:
         logger.error(f"Auto-adjust failed: {e}")
-
-
-@cli.command()
-@click.option('--settings-file', default='settings.yaml', help='Path to the settings YAML file.')
-def timelapse_tripod(settings_file):
-    """Start a timelapse with tripod movement using settings in settings.yaml."""
-    try:
-        settings = load_settings(settings_file)
-        script_settings = settings.get('script_settings', {})
-        camera_settings = settings.get('camera_settings', {})
-        tripod_settings = settings.get('tripod_settings', {})
-
-        with Tripod(
-            pan_start=tripod_settings.get('pan_start', 0),
-            pan_end=tripod_settings.get('pan_end', 0),
-            tilt_start=tripod_settings.get('tilt_start', 0),
-            tilt_end=tripod_settings.get('tilt_end', 0),
-            frames=script_settings.get('frames', 10),
-            port=tripod_settings.get('port', 'auto'),
-            movement_mode=tripod_settings.get('movement_mode', 'incremental'),
-            settle_time=tripod_settings.get('settle_time', 1.0),
-            microstep_resolution=tripod_settings.get('microstep_resolution', '1/16'),
-            command_timeout=tripod_settings.get('command_timeout', 10.0)
-        ) as tripod:
-            camera = init_camera()
-            set_camera_settings(camera, camera_settings)
-
-            # Take test shot
-            go = False
-            while not go:
-                capture_image(camera, 'snapshot.jpg')
-                proceed = click.prompt("Check the test image (snapshot.jpg). Do you want to proceed? (y/n/q)", default='n')
-                if proceed.lower() == 'q':
-                    logger.info("Exiting.")
-                    exit_camera(camera)
-                    return
-                if proceed.lower() == 'y':
-                    go = True
-            # Start timelapse with tripod
-            start_timelapse_with_tripod(camera, tripod, script_settings)
-
-            exit_camera(camera)
-
-    except Exception as e:
-        logger.error(f"Timelapse with tripod failed: {e}")
 
 
 if __name__ == '__main__':
