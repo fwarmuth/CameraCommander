@@ -18,7 +18,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 import gphoto2 as gp
 
-from cameracommander.camera_utils import (
+from camera_utils import (
     TYPE_NAMES, VALUE_TYPES, CONTAINER_TYPES,
     flatten_widget, normalize_for_widget, choices,
 )
@@ -287,6 +287,77 @@ class CameraWrapper:
                 logger.error("Async capture failed: %s", exc)
 
         threading.Thread(target=_worker, daemon=True).start()
+    
+    def capture_image_no_af(self, dest: Path | None = None,
+                            timeout_ms: int = 5_000) -> Path:
+        """
+        Capture a photo **without driving the AF motor**.
+    
+        The function:
+          1.  Sends the EOS remote-release value «Immediate» ( = full-press, no AF ),
+              which the camera interprets as “fire the shutter *now*”.
+          2.  Waits for the GP_EVENT_FILE_ADDED event and downloads that file.
+          3.  Sends «Release Full» so the shutter button state is reset.
+        """
+        EOS_REMOTE_RELEASE = "main.actions.eosremoterelease"     # Canon DSLRs / mirrorless
+        CAF              = "main.capturesettings.continuousaf"   # optional – see notes
+        def _inner() -> Path:
+            # ---------- trigger shutter (no-AF) ----------
+            # (Optionally be explicit and switch continuous-AF off once, e.g. at start-up)
+            # self.apply_settings({CAF: "Off"})
+            self.apply_settings({EOS_REMOTE_RELEASE: "Immediate"})
+    
+            # ---------- wait until the camera tells us which file was created ----------
+            # libgphoto2 raises GP_EVENT_FILE_ADDED when exposure finished
+            evt_type, evt_data = gp.check_result(
+                gp.gp_camera_wait_for_event(self._camera, timeout_ms, self._context)
+            )
+            while evt_type != gp.GP_EVENT_FILE_ADDED:
+                evt_type, evt_data = gp.check_result(
+                    gp.gp_camera_wait_for_event(self._camera, timeout_ms, self._context)
+                )
+            file_path_from_camera = evt_data      # (folder, name)
+    
+            # ---------- download ----------
+            camera_file = gp.check_result(
+                gp.gp_camera_file_get(
+                    self._camera,
+                    file_path_from_camera.folder,
+                    file_path_from_camera.name,
+                    gp.GP_FILE_TYPE_NORMAL,
+                )
+            )
+            data = gp.check_result(gp.gp_file_get_data_and_size(camera_file))
+    
+            # build output path exactly like your original helper -------------
+            if dest and dest.suffix:                  # caller supplied fixed filename
+                output_path = dest
+            else:
+                output_dir = dest or Path(tempfile.gettempdir())
+                timestamp = int(time.time())
+                extension = Path(file_path_from_camera.name).suffix
+                output_path = output_dir / f"capture_{timestamp}{extension}"
+    
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(output_path, "wb") as fh:
+                fh.write(data)
+    
+            # ---------- clean up on camera ----------
+            gp.check_result(
+                gp.gp_camera_file_delete(
+                    self._camera,
+                    file_path_from_camera.folder,
+                    file_path_from_camera.name,
+                    self._context,
+                )
+            )
+    
+            # ---------- release the virtual shutter button ----------
+            # If you omit this, the next shot may return “Device Busy”
+            self.apply_settings({EOS_REMOTE_RELEASE: "Release Full"})
+            return output_path
+    
+        return self._with_reconnect(_inner)
 
     # ----------------------------- battery ---------------------------------- #
 
