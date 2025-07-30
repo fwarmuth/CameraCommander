@@ -15,6 +15,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+import io
 
 import gphoto2 as gp
 
@@ -73,6 +74,7 @@ class CameraWrapper:
         model, port = re.match(r"^(.+?) \((.+)\)$", matches[0]).groups()  # type: ignore
         return cls(model, port)
 
+
     # --------------------------- connection --------------------------------- #
 
     def _open_camera(self) -> None:
@@ -129,6 +131,7 @@ class CameraWrapper:
                 logger.warning(f"returncode: {result.returncode}")
         except subprocess.SubprocessError as exc:
             logger.error("usbreset failed: %s", exc)
+    
 
     # ------------------------- retry decorator ------------------------------ #
 
@@ -242,7 +245,7 @@ class CameraWrapper:
         if step_size not in (1, 2, 3):           raise ValueError
         self.apply_settings({"main.actions.manualfocusdrive": f"{direction.capitalize()} {step_size}"})
 
-    def focus_step(self, direction="near", step_size=1):
+    def focus_step(self, direction="near", step_size=1, live_view=False):
         # Check if "main.capturesettings.continuousaf" is off
         if self.query_settings()["main.capturesettings.continuousaf"] != "Off":
             logger.debug("Turning off continuous AF")
@@ -252,7 +255,15 @@ class CameraWrapper:
             logger.debug("Turning on viewfinder")
             self.apply_settings({"main.actions.viewfinder": 1})
         self._focus_step(direction, step_size)
-        self.apply_settings({"main.actions.viewfinder": 0})
+        if not live_view:
+            self.apply_settings({"main.actions.viewfinder": 0})
+
+    def capture_preview(self) -> io.BytesIO:
+        def _inner() -> io.BytesIO:
+            camera_file = gp.check_result(gp.gp_camera_capture_preview(self._camera))
+            data = gp.check_result(gp.gp_file_get_data_and_size(camera_file))
+            return io.BytesIO(data)
+        return self._with_reconnect(_inner)
 
     # ----------------------------- capture ---------------------------------- #
 
