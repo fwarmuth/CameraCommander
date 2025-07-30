@@ -237,6 +237,23 @@ class CameraWrapper:
 
         return self._with_reconnect(_inner)
 
+    def _focus_step(self, direction="near", step_size=1):
+        if direction not in ("near", "far"): raise ValueError
+        if step_size not in (1, 2, 3):           raise ValueError
+        self.apply_settings({"main.actions.manualfocusdrive": f"{direction.capitalize()} {step_size}"})
+
+    def focus_step(self, direction="near", step_size=1):
+        # Check if "main.capturesettings.continuousaf" is off
+        if self.query_settings()["main.capturesettings.continuousaf"] != "Off":
+            logger.debug("Turning off continuous AF")
+            self.apply_settings({"main.capturesettings.continuousaf": "Off"})
+        # Check if "main.actions.viewfinder" is on
+        if self.query_settings()["main.actions.viewfinder"] != 1:
+            logger.debug("Turning on viewfinder")
+            self.apply_settings({"main.actions.viewfinder": 1})
+        self._focus_step(direction, step_size)
+        self.apply_settings({"main.actions.viewfinder": 0})
+
     # ----------------------------- capture ---------------------------------- #
 
     def capture_image(self, dest: Optional[Path] = None) -> Path:
@@ -300,7 +317,6 @@ class CameraWrapper:
           3.  Sends «Release Full» so the shutter button state is reset.
         """
         EOS_REMOTE_RELEASE = "main.actions.eosremoterelease"     # Canon DSLRs / mirrorless
-        CAF              = "main.capturesettings.continuousaf"   # optional – see notes
         def _inner() -> Path:
             # ---------- trigger shutter (no-AF) ----------
             # (Optionally be explicit and switch continuous-AF off once, e.g. at start-up)
