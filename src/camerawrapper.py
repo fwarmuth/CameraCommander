@@ -16,7 +16,6 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 import io
-
 import gphoto2 as gp
 
 from camera_utils import (
@@ -241,8 +240,8 @@ class CameraWrapper:
         return self._with_reconnect(_inner)
 
     def _focus_step(self, direction="near", step_size=1):
-        if direction not in ("near", "far"): raise ValueError
-        if step_size not in (1, 2, 3):           raise ValueError
+        if direction not in ("near", "far"): raise ValueError(f"direction must be 'near' or 'far', not {direction}")
+        if step_size not in (1, 2, 3):           raise ValueError(f"step_size must be 1, 2 or 3, not {step_size}")
         self.apply_settings({"main.actions.manualfocusdrive": f"{direction.capitalize()} {step_size}"})
 
     def focus_step(self, direction="near", step_size=1, live_view=False):
