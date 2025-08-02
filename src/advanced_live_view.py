@@ -1,4 +1,3 @@
-
 import asyncio
 import logging
 from camerawrapper import CameraWrapper, CameraError
@@ -14,6 +13,9 @@ logger = logging.getLogger(__name__)
 # Global camera instance and lock
 cam: CameraWrapper = None
 camera_lock = asyncio.Lock()
+
+CROP_STATE = None
+
 
 async def initialize_camera():
     """Initializes the camera and enables the viewfinder."""
@@ -42,7 +44,7 @@ async def close_camera():
         finally:
             cam = None
 
-async def get_live_frame():
+async def get_live_frame(crop_state=None):
     """Captures a single frame from the camera's live view."""
     if cam is None:
         return np.zeros((480, 640, 3), dtype=np.uint8)  # Return a black image if camera is not available
@@ -51,6 +53,28 @@ async def get_live_frame():
         try:
             frame_data = await asyncio.to_thread(cam.capture_preview)
             image = Image.open(io.BytesIO(frame_data.getvalue()))
+            original_size = image.size
+
+            if crop_state and 'center' in crop_state and 'size' in crop_state:
+                center_x, center_y = crop_state['center']
+                size = crop_state['size']
+                
+                width, height = original_size
+                
+                left = max(0, center_x - size // 2)
+                top = max(0, center_y - size // 2)
+                right = min(width, center_x + size // 2)
+                bottom = min(height, center_y + size // 2)
+
+                if left >= right or top >= bottom:
+                    return np.array(image)
+                
+                cropped_image = image.crop((left, top, right, bottom))
+                
+                # Resize to original size using nearest neighbor
+                resized_image = cropped_image.resize(original_size, Image.NEAREST)
+                return np.array(resized_image)
+
             return np.array(image)
         except Exception as e:
             logger.error(f"Error capturing preview: {e}")
@@ -80,6 +104,8 @@ async def focus_camera(direction: str, step_size: int):
 def create_gradio_interface():
     """Creates and returns the Gradio interface."""
     with gr.Blocks() as demo:
+        crop_state_val = gr.State(None)
+
         gr.Markdown("# Camera Commander - Advanced Live View")
 
         with gr.Row():
@@ -92,6 +118,11 @@ def create_gradio_interface():
                 step_size_slider = gr.Slider(minimum=1, maximum=3, step=1, value=3, label="Step Size")
                 focus_status = gr.Textbox(label="Focus Status")
 
+                gr.Markdown("## Crop Control")
+                crop_size_slider = gr.Slider(minimum=50, maximum=500, step=10, value=200, label="Crop Size")
+                reset_crop_btn = gr.Button("Reset Crop")
+
+
         async def focus_in_handler(step):
             return await focus_camera('near', step)
 
@@ -101,14 +132,29 @@ def create_gradio_interface():
         focus_in_btn.click(fn=focus_in_handler, inputs=step_size_slider, outputs=focus_status)
         focus_out_btn.click(fn=focus_out_handler, inputs=step_size_slider, outputs=focus_status)
 
-        async def live_view_generator():
+        def set_crop(crop_size, evt: gr.SelectData):
+            global CROP_STATE
+            state = {'center': evt.index, 'size': crop_size}
+            CROP_STATE = state
+            return state
+
+        def reset_crop():
+            global CROP_STATE
+            CROP_STATE = None
+            return None
+
+        live_image.select(set_crop, [crop_size_slider], crop_state_val)
+        reset_crop_btn.click(reset_crop, None, crop_state_val)
+
+        async def live_view_stream():
             while True:
-                frame = await get_live_frame()
+                global CROP_STATE
+                frame = await get_live_frame(CROP_STATE)
                 yield frame
                 await asyncio.sleep(0.1)
 
-        # Setup live view streaming by returning a generator
-        demo.load(live_view_generator, None, live_image)
+        demo.load(live_view_stream, None, live_image)
+
 
     return demo
 
