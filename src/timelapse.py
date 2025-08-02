@@ -19,6 +19,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -92,8 +93,9 @@ class TimelapseSession:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.video_path: Path = self.output_dir / "timelapse.mp4"
 
-        # Register SIGINT handler for graceful aborts
-        signal.signal(signal.SIGINT, self._sigint_handler)
+        # Register SIGINT handler for graceful aborts only when in main thread
+        if threading.current_thread() is threading.main_thread():
+            signal.signal(signal.SIGINT, self._sigint_handler)
 
     # ------------------------------------------------------------------ #
     # Public API
