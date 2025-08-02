@@ -1,10 +1,15 @@
 import asyncio
 import logging
-from camerawrapper import CameraWrapper, CameraError
+import io
+import tempfile
+from typing import Any, Dict
+
 import gradio as gr
 import numpy as np
 from PIL import Image
-import io
+import yaml
+
+from camerawrapper import CameraWrapper, CameraError
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -108,6 +113,32 @@ def create_gradio_interface():
 
         gr.Markdown("# Camera Commander - Advanced Live View")
 
+        # Fetch current camera settings to populate UI choices
+        iso_choices: list[Any] = []
+        shutter_choices: list[Any] = []
+        aperture_choices: list[Any] = []
+        wb_choices: list[Any] = []
+        iso_val = shutter_val = aperture_val = wb_val = None
+        if cam:
+            current: Dict[str, Dict[str, Any]] = cam.query_settings()
+
+            def _get(key: str):
+                return current.get(key, {})
+
+            iso_entry = _get("main.imgsettings.iso")
+            shutter_entry = _get("main.capturesettings.shutterspeed")
+            aperture_entry = _get("main.capturesettings.aperture")
+            wb_entry = _get("main.imgsettings.whitebalance")
+
+            iso_choices = iso_entry.get("choices") or []
+            shutter_choices = shutter_entry.get("choices") or []
+            aperture_choices = aperture_entry.get("choices") or []
+            wb_choices = wb_entry.get("choices") or []
+            iso_val = iso_entry.get("current")
+            shutter_val = shutter_entry.get("current")
+            aperture_val = aperture_entry.get("current")
+            wb_val = wb_entry.get("current")
+
         with gr.Row():
             with gr.Column():
                 live_image = gr.Image(label="Live View", type="numpy")
@@ -121,6 +152,24 @@ def create_gradio_interface():
                 gr.Markdown("## Crop Control")
                 crop_size_slider = gr.Slider(minimum=50, maximum=500, step=10, value=200, label="Crop Size")
                 reset_crop_btn = gr.Button("Reset Crop")
+
+                gr.Markdown("## Camera Settings")
+                iso_dropdown = gr.Dropdown(
+                    choices=iso_choices, value=iso_val, label="ISO"
+                )
+                shutter_dropdown = gr.Dropdown(
+                    choices=shutter_choices, value=shutter_val, label="Shutter Speed"
+                )
+                aperture_dropdown = gr.Dropdown(
+                    choices=aperture_choices, value=aperture_val, label="Aperture"
+                )
+                wb_dropdown = gr.Dropdown(
+                    choices=wb_choices, value=wb_val, label="White Balance"
+                )
+                apply_settings_btn = gr.Button("Apply Camera Settings")
+                settings_status = gr.Textbox(label="Settings Status")
+                export_btn = gr.Button("Export Camera Settings")
+                export_file = gr.File(label="Settings YAML")
 
 
         async def focus_in_handler(step):
@@ -143,8 +192,46 @@ def create_gradio_interface():
             CROP_STATE = None
             return None
 
+        async def apply_camera_settings(iso, shutter, aperture, wb):
+            if cam is None:
+                return "Camera not available."
+            settings = {
+                "main.imgsettings.iso": iso,
+                "main.capturesettings.shutterspeed": shutter,
+                "main.capturesettings.aperture": aperture,
+                "main.imgsettings.whitebalance": wb,
+            }
+            try:
+                await asyncio.to_thread(cam.apply_settings, settings)
+                return "Settings applied."
+            except CameraError as e:
+                return f"Error: {e}"
+
+        def export_camera_settings(iso, shutter, aperture, wb):
+            data = {
+                "camera": {
+                    "main.imgsettings.iso": iso,
+                    "main.capturesettings.shutterspeed": shutter,
+                    "main.capturesettings.aperture": aperture,
+                    "main.imgsettings.whitebalance": wb,
+                }
+            }
+            with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".yaml") as fh:
+                yaml.safe_dump(data, fh)
+                return fh.name
+
         live_image.select(set_crop, [crop_size_slider], crop_state_val)
         reset_crop_btn.click(reset_crop, None, crop_state_val)
+        apply_settings_btn.click(
+            apply_camera_settings,
+            [iso_dropdown, shutter_dropdown, aperture_dropdown, wb_dropdown],
+            settings_status,
+        )
+        export_btn.click(
+            export_camera_settings,
+            [iso_dropdown, shutter_dropdown, aperture_dropdown, wb_dropdown],
+            export_file,
+        )
 
         async def live_view_stream():
             while True:
