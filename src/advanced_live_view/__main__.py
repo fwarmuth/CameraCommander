@@ -1,8 +1,8 @@
 import asyncio
 
-from .camera import close_camera, initialize_camera
-from .tripod import tripod
-from .ui import create_gradio_interface
+from advanced_live_view.camera import close_camera, initialize_camera
+from advanced_live_view.tripod import tripod
+from advanced_live_view.ui import create_gradio_interface
 
 
 def main() -> None:
