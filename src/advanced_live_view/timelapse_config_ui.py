@@ -7,6 +7,8 @@ match full timelapse runs.
 """
 
 import asyncio
+import tempfile
+from pathlib import Path
 from typing import Any, Dict
 
 import gradio as gr
@@ -94,7 +96,10 @@ def create_gradio_interface() -> gr.Blocks:
                             choices=wb_choices, value=wb_val, label="White Balance"
                         )
                         apply_settings_btn = gr.Button("Apply Camera Settings")
+                        snapshot_btn = gr.Button("Take Snapshot")
                         settings_status = gr.Textbox(label="Settings Status")
+                        snapshot_image = gr.Image(label="Snapshot", type="filepath")
+                        snapshot_status = gr.Textbox(label="Snapshot Status")
 
                     with gr.Accordion("Tripod Settings", open=False):
                         serial_port_input = gr.Textbox(
@@ -171,6 +176,35 @@ def create_gradio_interface() -> gr.Blocks:
                 return "Settings applied."
             except Exception as exc:  # pragma: no cover - hardware dependent
                 return f"Error: {exc}"
+
+        async def snapshot_handler(iso, shutter, aperture, wb):
+            from .camera import cam, camera_lock
+            if cam is None:
+                return None, "Camera not available."
+            settings = {
+                "main.imgsettings.iso": iso,
+                "main.capturesettings.shutterspeed": shutter,
+                "main.capturesettings.aperture": aperture,
+                "main.imgsettings.whitebalance": wb,
+            }
+            async with camera_lock:
+                try:
+                    await asyncio.to_thread(cam.apply_settings, settings)
+                    await asyncio.to_thread(
+                        cam.apply_settings, {"main.actions.viewfinder": 0}
+                    )
+                    path = Path(tempfile.gettempdir()) / "snapshot.jpg"
+                    await asyncio.to_thread(cam.capture_image, dest=path)
+                    return str(path), "Snapshot captured."
+                except Exception as exc:  # pragma: no cover - hardware dependent
+                    return None, f"Error: {exc}"
+                finally:
+                    try:
+                        await asyncio.to_thread(
+                            cam.apply_settings, {"main.actions.viewfinder": 1}
+                        )
+                    except Exception:  # pragma: no cover - hardware dependent
+                        pass
 
         def export_settings_handler(
             iso,
@@ -254,6 +288,11 @@ def create_gradio_interface() -> gr.Blocks:
             apply_camera_settings,
             [iso_dropdown, shutter_dropdown, aperture_dropdown, wb_dropdown],
             settings_status,
+        )
+        snapshot_btn.click(
+            snapshot_handler,
+            [iso_dropdown, shutter_dropdown, aperture_dropdown, wb_dropdown],
+            [snapshot_image, snapshot_status],
         )
         go_start_btn.click(
             move_tripod_to,
