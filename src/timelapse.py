@@ -80,8 +80,6 @@ class TimelapseSession:
         self.camera: Optional[CameraWrapper] = None
         self.tripod: Optional[TripodController] = None
 
-        self._pan_step: float = 0.0
-        self._tilt_step: float = 0.0
         self._metadata_csv: Optional[csv.DictWriter] = None
         self._metadata_file_handle: Optional[Any] = None  # file object
         self._stop_now: bool = False
@@ -118,9 +116,9 @@ class TimelapseSession:
         f_total = self._tl.total_frames
         if f_total < 2:
             raise TimelapseError("total_frames must be ≥ 2")
-        self._pan_step = (self._tl.target["pan"] - self._tl.start["pan"]) / (f_total - 1)
-        self._tilt_step = (self._tl.target["tilt"] - self._tl.start["tilt"]) / (f_total - 1)
-        logger.info("Per-frame step Δpan=%.6f°, Δtilt=%.6f°", self._pan_step, self._tilt_step)
+        pan_step = (self._tl.target["pan"] - self._tl.start["pan"]) / (f_total - 1)
+        tilt_step = (self._tl.target["tilt"] - self._tl.start["tilt"]) / (f_total - 1)
+        logger.info("Per-frame step Δpan=%.6f°, Δtilt=%.6f°", pan_step, tilt_step)
 
         # ---- disk space check -------------------------------------------
         self._check_disk_space()
@@ -142,6 +140,14 @@ class TimelapseSession:
             self.prepare()
 
         logger.info("Starting capture loop (%s frames)", self._tl.total_frames)
+
+        # Determine per-frame absolute targets once and let the TripodController
+        # track its own position state.
+        start_pan = self._tl.start["pan"]
+        start_tilt = self._tl.start["tilt"]
+        pan_step = (self._tl.target["pan"] - start_pan) / (self._tl.total_frames - 1)
+        tilt_step = (self._tl.target["tilt"] - start_tilt) / (self._tl.total_frames - 1)
+
         try:
             for idx in range(self._tl.total_frames):
                 if self._stop_now:
@@ -158,8 +164,11 @@ class TimelapseSession:
                 if idx == self._tl.total_frames - 1:
                     break
 
-                # Move to next position & wait for movement to finish
-                self.tripod.move_blocking(pan_deg=self._pan_step, tilt_deg=self._tilt_step)
+                # Compute next absolute target and delegate the relative motion to
+                # TripodController, avoiding duplicate state tracking here.
+                next_pan = start_pan + (idx + 1) * pan_step
+                next_tilt = start_tilt + (idx + 1) * tilt_step
+                self.tripod.move_to_blocking(pan_deg=next_pan, tilt_deg=next_tilt)
 
                 # Timing cadence --------------------------------------------------
                 elapsed = time.monotonic() - iter_start
@@ -308,7 +317,9 @@ class TimelapseSession:
         start_pan = self._tl.start["pan"]
         start_tilt = self._tl.start["tilt"]
         logger.info("Moving tripod to start position pan=%.2f°, tilt=%.2f°", start_pan, start_tilt)
-        self.tripod.move_blocking(pan_deg=start_pan, tilt_deg=start_tilt)
+        # Use absolute positioning from TripodController to avoid manual state
+        # tracking in this session.
+        self.tripod.move_to_blocking(pan_deg=start_pan, tilt_deg=start_tilt)
         self.tripod.enable_drivers(True)
 
     # ------------------------------------------------------------------ #
