@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from threading import Lock
+from threading import RLock
 from typing import Optional, Tuple
 
 import serial
@@ -39,10 +39,10 @@ class TripodController:
 
     Notes
     -----
-    The class maintains **relative** pan and tilt positions in *degrees*.
-    Because the device exposes only relative motion, we accumulate offsets in
-    software. Call :py:meth:`reset_position` after homing to keep values in
-    sync.
+    The class maintains the current absolute pan and tilt positions in degrees
+    by accumulating relative moves in software. Because the device exposes only
+    relative motion, this state is purely software‑based. Call
+    :py:meth:`reset_position` after homing to keep values in sync.
 
     All public methods are thread‑safe.
     """
@@ -56,9 +56,10 @@ class TripodController:
     def __init__(self, config: dict) -> None:
         self._cfg = config.copy()
         self._serial: Optional[serial.Serial] = None
-        self._lock = Lock()
+        self._lock = RLock()
 
         # init state ----------------------------------------------------#
+        # absolute position in degrees
         self._pan_deg: float = 0.0
         self._tilt_deg: float = 0.0
         self._drivers_enabled: bool = False
@@ -154,9 +155,27 @@ class TripodController:
         """Move axes by the specified *relative* degrees *non‑blocking*."""
         if pan_deg == 0.0 and tilt_deg == 0.0:
             return
-        self._send(f"M {pan_deg} {tilt_deg}")
-        self._pan_deg += pan_deg
-        self._tilt_deg += tilt_deg
+        with self._lock:
+            self._send(f"M {pan_deg} {tilt_deg}")
+            self._pan_deg += pan_deg
+            self._tilt_deg += tilt_deg
+
+    def move_to(self, pan_deg: float | None = None, tilt_deg: float | None = None) -> None:
+        """Move axes to the given *absolute* pan/tilt angles.
+
+        Parameters
+        ----------
+        pan_deg, tilt_deg
+            Absolute angles in degrees. ``None`` leaves an axis unchanged.
+        """
+        with self._lock:
+            delta_pan = 0.0 if pan_deg is None else pan_deg - self._pan_deg
+            delta_tilt = 0.0 if tilt_deg is None else tilt_deg - self._tilt_deg
+            if delta_pan == 0.0 and delta_tilt == 0.0:
+                return
+            self._send(f"M {delta_pan} {delta_tilt}")
+            self._pan_deg += delta_pan
+            self._tilt_deg += delta_tilt
 
     def move_blocking(self, pan_deg: float = 0.0, tilt_deg: float = 0.0,
                       poll_interval: float = 0.05, timeout: float | None = None) -> None:
@@ -181,6 +200,17 @@ class TripodController:
         while self.query_busy():
             if timeout is not None and (time.monotonic() - start) > timeout:
                 raise TimeoutError("move_blocking timed out")
+            time.sleep(poll_interval)
+
+    def move_to_blocking(self, pan_deg: float | None = None, tilt_deg: float | None = None,
+                         poll_interval: float = 0.05,
+                         timeout: float | None = None) -> None:
+        """Absolute :py:meth:`move_to` variant that blocks until movement completes."""
+        start = time.monotonic()
+        self.move_to(pan_deg, tilt_deg)
+        while self.query_busy():
+            if timeout is not None and (time.monotonic() - start) > timeout:
+                raise TimeoutError("move_to_blocking timed out")
             time.sleep(poll_interval)
 
     def stop(self) -> None:
@@ -242,7 +272,7 @@ class TripodController:
     # ------------------------------------------------------------------ #
     @property
     def position(self) -> Tuple[float, float]:
-        """Current accumulated (pan, tilt) in degrees."""
+        """Current absolute (pan, tilt) in degrees."""
         return self._pan_deg, self._tilt_deg
 
     def reset_position(self) -> None:
