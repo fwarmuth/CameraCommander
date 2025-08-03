@@ -14,11 +14,11 @@ from __future__ import annotations
 import csv
 import json
 import logging
+import re
 import shlex
 import shutil
 import signal
 import subprocess
-import sys
 import threading
 import time
 from pathlib import Path
@@ -34,6 +34,8 @@ try:
     import piexif  # type: ignore
 except ModuleNotFoundError:  # pragma: no cover
     piexif = None  # noqa: N816 – allow camel
+
+from tqdm import tqdm
 
 # Local project imports
 from camerawrapper import CameraWrapper, CameraError
@@ -267,10 +269,29 @@ class TimelapseSession:
         cmd.append(str(self.video_path))
 
         try:
-            subprocess.run(cmd, cwd=self.output_dir, check=True, capture_output=True)
-        except subprocess.CalledProcessError as exc:
-            stderr = exc.stderr.decode(errors="ignore") if exc.stderr else "<no stderr>"
-            raise TimelapseError(f"ffmpeg failed: {stderr.strip()}") from exc
+            proc = subprocess.Popen(
+                cmd,
+                cwd=self.output_dir,
+                stderr=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                text=True,
+            )
+        except OSError as exc:
+            raise TimelapseError(f"ffmpeg failed: {exc}") from exc
+
+        assert proc.stderr is not None  # for type checkers
+        stderr_lines: list[str] = []
+        with tqdm(total=self._tl.total_frames, unit="frame") as bar:
+            for line in proc.stderr:
+                stderr_lines.append(line)
+                match = re.search(r"frame=\s*(\d+)", line)
+                if match:
+                    frame = int(match.group(1))
+                    bar.update(frame - bar.n)
+        ret = proc.wait()
+        if ret != 0:
+            stderr = "".join(stderr_lines).strip() or "<no stderr>"
+            raise TimelapseError(f"ffmpeg failed: {stderr}")
 
         logger.info("Video written to %s", self.video_path)
         return self.video_path
