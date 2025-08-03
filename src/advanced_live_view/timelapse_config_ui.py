@@ -21,7 +21,11 @@ CROP_STATE: Dict[str, Any] | None = None
 
 def create_gradio_interface() -> gr.Blocks:
     """Create and return the Gradio interface."""
-    with gr.Blocks() as demo:
+    # Limit the height of the configuration panel so that expanding multiple
+    # accordions does not push the live view off screen. The panel becomes
+    # scrollable instead, keeping the live preview in view.
+    css = ".config-scroll{overflow-y:auto; max-height:600px;}"
+    with gr.Blocks(css=css) as demo:
         # Store current crop rectangle between interactions
         crop_state_val = gr.State(None)
 
@@ -65,63 +69,69 @@ def create_gradio_interface() -> gr.Blocks:
                 reset_crop_btn = gr.Button("Reset Crop")
 
             with gr.Column():
-                with gr.Accordion("Focus Control", open=False):
-                    focus_in_btn = gr.Button("Focus In/Near")
-                    focus_out_btn = gr.Button("Focus Out/Far")
-                    step_size_slider = gr.Slider(
-                        minimum=1, maximum=3, step=1, value=3, label="Step Size"
-                    )
-                    focus_status = gr.Textbox(label="Focus Status")
+                # All configuration accordions live in a scrollable column so the
+                # live view remains visible even when many options are expanded.
+                with gr.Column(elem_classes="config-scroll"):
+                    with gr.Accordion("Focus Control", open=False):
+                        focus_in_btn = gr.Button("Focus In/Near")
+                        focus_out_btn = gr.Button("Focus Out/Far")
+                        step_size_slider = gr.Slider(
+                            minimum=1, maximum=3, step=1, value=3, label="Step Size"
+                        )
+                        focus_status = gr.Textbox(label="Focus Status")
 
-                with gr.Accordion("Camera Settings", open=False):
-                    iso_dropdown = gr.Dropdown(
-                        choices=iso_choices, value=iso_val, label="ISO"
-                    )
-                    shutter_dropdown = gr.Dropdown(
-                        choices=shutter_choices, value=shutter_val, label="Shutter Speed"
-                    )
-                    aperture_dropdown = gr.Dropdown(
-                        choices=aperture_choices, value=aperture_val, label="Aperture"
-                    )
-                    wb_dropdown = gr.Dropdown(
-                        choices=wb_choices, value=wb_val, label="White Balance"
-                    )
-                    apply_settings_btn = gr.Button("Apply Camera Settings")
-                    settings_status = gr.Textbox(label="Settings Status")
+                    with gr.Accordion("Camera Settings", open=False):
+                        iso_dropdown = gr.Dropdown(
+                            choices=iso_choices, value=iso_val, label="ISO"
+                        )
+                        shutter_dropdown = gr.Dropdown(
+                            choices=shutter_choices, value=shutter_val, label="Shutter Speed"
+                        )
+                        aperture_dropdown = gr.Dropdown(
+                            choices=aperture_choices, value=aperture_val, label="Aperture"
+                        )
+                        wb_dropdown = gr.Dropdown(
+                            choices=wb_choices, value=wb_val, label="White Balance"
+                        )
+                        apply_settings_btn = gr.Button("Apply Camera Settings")
+                        settings_status = gr.Textbox(label="Settings Status")
 
-                with gr.Accordion("Tripod Settings", open=False):
-                    serial_port_input = gr.Textbox(
-                        value="/dev/ttyUSB0", label="Serial Port"
-                    )
-                    microstep_input = gr.Dropdown(
-                        [1, 2, 4, 8, 16], value=16, label="Microstep"
-                    )
-                    start_pan_input = gr.Number(value=0.0, label="Start Pan (°)")
-                    start_tilt_input = gr.Number(value=0.0, label="Start Tilt (°)")
-                    end_pan_input = gr.Number(value=0.0, label="End Pan (°)")
-                    end_tilt_input = gr.Number(value=0.0, label="End Tilt (°)")
-                    go_start_btn = gr.Button("Go to Start Position")
-                    go_end_btn = gr.Button("Go to End Position")
-                    tripod_status = gr.Textbox(label="Tripod Status")
+                    with gr.Accordion("Tripod Settings", open=False):
+                        serial_port_input = gr.Textbox(
+                            value="/dev/ttyUSB0", label="Serial Port"
+                        )
+                        microstep_input = gr.Dropdown(
+                            [1, 2, 4, 8, 16], value=16, label="Microstep"
+                        )
+                        start_pan_input = gr.Number(value=0.0, label="Start Pan (°)")
+                        start_tilt_input = gr.Number(value=0.0, label="Start Tilt (°)")
+                        end_pan_input = gr.Number(value=0.0, label="End Pan (°)")
+                        end_tilt_input = gr.Number(value=0.0, label="End Tilt (°)")
+                        go_start_btn = gr.Button("Go to Start Position")
+                        go_end_btn = gr.Button("Go to End Position")
+                        tripod_status = gr.Textbox(label="Tripod Status")
 
-                with gr.Accordion("Timelapse Settings", open=False):
-                    total_frames_input = gr.Number(value=10, label="Total Frames")
-                    interval_input = gr.Number(value=1.5, label="Interval (s)")
-                    settle_input = gr.Number(value=0.3, label="Settle Time (s)")
-                    output_dir_input = gr.Textbox(
-                        value="./output", label="Output Dir"
-                    )
-                    video_fps_input = gr.Number(value=25, label="Video FPS")
-                    export_btn = gr.Button("Export Settings")
-                    export_file = gr.File(label="Settings YAML")
+                    with gr.Accordion("Timelapse Settings", open=False):
+                        total_frames_input = gr.Number(value=10, label="Total Frames")
+                        interval_input = gr.Number(value=1.5, label="Interval (s)")
+                        settle_input = gr.Number(value=0.3, label="Settle Time (s)")
+                        output_dir_input = gr.Textbox(
+                            value="./output", label="Output Dir"
+                        )
+                        video_fps_input = gr.Number(value=25, label="Video FPS")
 
-                with gr.Accordion("Prototype Timelapse", open=False):
-                    proto_frames_input = gr.Number(
-                        value=5, label="Prototype Frames"
-                    )
-                    run_proto_btn = gr.Button("Run Prototype")
-                    proto_gallery = gr.Gallery(label="Prototype Frames")
-                    proto_status = gr.Textbox(label="Prototype Status")
+                    with gr.Accordion("Prototype Timelapse", open=False):
+                        proto_frames_input = gr.Number(
+                            value=5, label="Prototype Frames"
+                        )
+                        run_proto_btn = gr.Button("Run Prototype")
+                        proto_gallery = gr.Gallery(label="Prototype Frames")
+                        proto_status = gr.Textbox(label="Prototype Status")
+
+                # Export options apply to the entire configuration and sit
+                # outside any specific accordion.
+                export_btn = gr.Button("Export Settings")
+                export_file = gr.File(label="Settings YAML")
 
         # Focus helpers ----------------------------------------------------
         async def focus_in_handler(step: int):
