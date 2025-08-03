@@ -1,3 +1,11 @@
+"""Gradio based UI for building timelapse configuration files.
+
+The interface allows users to interactively tweak camera focus, apply capture
+settings and export the resulting configuration for later use.  It mirrors the
+options used by :class:`timelapse.TimelapseSession` so that prototypes closely
+match full timelapse runs.
+"""
+
 import asyncio
 from typing import Any, Dict
 
@@ -7,15 +15,18 @@ from .camera import focus_camera, get_live_frame
 from .config import build_settings, export_settings, run_prototype_timelapse
 from .tripod import move_tripod_to
 
+# Global crop selection used by ``get_live_frame``
 CROP_STATE: Dict[str, Any] | None = None
 
 
 def create_gradio_interface() -> gr.Blocks:
     """Create and return the Gradio interface."""
     with gr.Blocks() as demo:
+        # Store current crop rectangle between interactions
         crop_state_val = gr.State(None)
 
-        gr.Markdown("# Camera Commander - Advanced Live View")
+        # Title reflects the new focus of the tool – building timelapse configs
+        gr.Markdown("# Camera Commander - Timelapse Config Builder")
 
         # Fetch current camera settings to populate UI choices
         iso_choices: list[Any] = []
@@ -35,6 +46,7 @@ def create_gradio_interface() -> gr.Blocks:
             aperture_entry = _get("main.capturesettings.aperture")
             wb_entry = _get("main.imgsettings.whitebalance")
 
+            # Available options and currently selected values
             iso_choices = iso_entry.get("choices") or []
             shutter_choices = shutter_entry.get("choices") or []
             aperture_choices = aperture_entry.get("choices") or []
@@ -111,6 +123,7 @@ def create_gradio_interface() -> gr.Blocks:
                     proto_gallery = gr.Gallery(label="Prototype Frames")
                     proto_status = gr.Textbox(label="Prototype Status")
 
+        # Focus helpers ----------------------------------------------------
         async def focus_in_handler(step: int):
             return await focus_camera("near", step)
 
@@ -122,6 +135,8 @@ def create_gradio_interface() -> gr.Blocks:
 
         def set_crop(crop_size: int, evt: gr.SelectData):
             global CROP_STATE
+            # Store the selected crop centre + size so the live view generator
+            # can return a zoomed region on subsequent updates
             state = {"center": evt.index, "size": crop_size}
             CROP_STATE = state
             return state
@@ -164,6 +179,7 @@ def create_gradio_interface() -> gr.Blocks:
             output_dir,
             video_fps,
         ):
+            # Assemble a settings mapping and serialise to YAML
             data = build_settings(
                 iso,
                 shutter,
@@ -201,6 +217,8 @@ def create_gradio_interface() -> gr.Blocks:
             video_fps,
             proto_frames,
         ):
+            # Build settings and run a short test timelapse using the real
+            # TimelapseSession implementation
             cfg = build_settings(
                 iso,
                 shutter,
@@ -284,6 +302,8 @@ def create_gradio_interface() -> gr.Blocks:
         async def live_view_stream():
             while True:
                 global CROP_STATE
+                # Continuously fetch frames from the camera, applying the
+                # current crop selection if one is set.
                 frame = await get_live_frame(CROP_STATE)
                 yield frame
                 await asyncio.sleep(0.1)
