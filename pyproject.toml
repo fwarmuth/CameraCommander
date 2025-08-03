@@ -25,6 +25,5 @@ build-backend = "hatchling.build"
 
 [project.scripts]
 cameracommander = "cameracommander.cli:cli"
-tripodcommander = "tripod_commander.cli:cli"
 
 
