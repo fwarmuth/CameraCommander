@@ -51,14 +51,26 @@ def build_settings(
 
 
 async def run_prototype_timelapse(settings: Dict[str, Any], frames: int) -> tuple[list[str], str]:
-    """Run a short timelapse using the provided settings."""
+    """Run a short timelapse using the provided settings.
+
+    The settings are written to a temporary YAML file and fed into
+    :class:`~timelapse.TimelapseSession` to exercise the same code path used for
+    real captures.
+    """
     tmp_dir = tempfile.mkdtemp()
     cfg = settings.copy()
     cfg["timelapse"] = cfg["timelapse"].copy()
     cfg["timelapse"]["total_frames"] = int(frames)
     cfg["timelapse"]["output_dir"] = tmp_dir
+
+    # Persist config so TimelapseSession reads it as it would during normal
+    # operation.
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as fh:
+        yaml.safe_dump(cfg, fh)
+        cfg_path = fh.name
+
     try:
-        session = TimelapseSession(cfg)
+        session = TimelapseSession(cfg_path)
         await asyncio.to_thread(session.prepare)
         await asyncio.to_thread(session.run)
         images = sorted(Path(tmp_dir).glob("frame_*.jpg"))

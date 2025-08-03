@@ -2,7 +2,7 @@ import asyncio
 
 from advanced_live_view.camera import close_camera, initialize_camera
 from advanced_live_view.tripod import tripod
-from advanced_live_view.ui import create_gradio_interface
+from advanced_live_view.timelapse_config_ui import create_gradio_interface
 
 
 def main() -> None:
