@@ -18,6 +18,16 @@ async def get_tripod(serial_port: str, microstep: int) -> TripodController:
     return tripod
 
 
+async def close_tripod() -> None:
+    """Close and clear the cached TripodController instance."""
+    global tripod
+    if tripod is not None:
+        try:
+            await asyncio.to_thread(tripod.close)
+        finally:
+            tripod = None
+
+
 async def move_tripod_to(pan: float, tilt: float, serial_port: str, microstep: int) -> str:
     """Move tripod to the requested relative pan/tilt angles."""
     try:

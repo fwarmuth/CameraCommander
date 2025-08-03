@@ -7,6 +7,8 @@ import yaml
 
 from camerawrapper import CameraError
 from timelapse import TimelapseError, TimelapseSession
+from .camera import close_camera, initialize_camera
+from .tripod import close_tripod
 
 
 def build_settings(
@@ -69,14 +71,25 @@ async def run_prototype_timelapse(settings: Dict[str, Any], frames: int) -> tupl
         yaml.safe_dump(cfg, fh)
         cfg_path = fh.name
 
+    # Stop live view and release tripod before constructing a new session
+    await close_camera()
+    await close_tripod()
+
+    images: list[Path] = []
+    status: str
     try:
         session = TimelapseSession(cfg_path)
         await asyncio.to_thread(session.prepare)
         await asyncio.to_thread(session.run)
         images = sorted(Path(tmp_dir).glob("frame_*.jpg"))
-        return [str(p) for p in images], "Prototype timelapse completed"
+        status = "Prototype timelapse completed"
     except (TimelapseError, CameraError) as exc:  # pragma: no cover - hardware dependent
-        return [], f"Error: {exc}"
+        status = f"Error: {exc}"
+    finally:
+        # Restore camera for continued live view in the UI
+        await initialize_camera()
+
+    return [str(p) for p in images], status
 
 
 def export_settings(data: Dict[str, Any]) -> str:
