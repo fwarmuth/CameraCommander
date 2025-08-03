@@ -212,7 +212,7 @@ class TimelapseSession:
 
         # Capture
         try:
-            img_path = self.camera.capture_image(dest=path)
+            img_path = self.camera.capture_image_no_af(dest=path)
         except CameraError as exc:
             raise TimelapseError(f"Camera capture failed: {exc}") from exc
 
