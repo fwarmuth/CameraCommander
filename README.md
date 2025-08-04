@@ -4,6 +4,22 @@ A CLI application for creating time‑lapse videos using a gphoto2 compatible ca
 The application allows you to configure camera and tripod settings via a single YAML file to make captures reproducible.
 Main function is to capture snapshots and start time‑lapse recordings by continuously capturing images at a given interval. The images are saved to a folder and can be used to create time‑lapse videos, e.g. using ffmpeg.
 
+
+## Example Workflow (timelapse)
+1. Connect camera via USB and attach the tripod controller.
+2. Create or adjust `settings.yaml` (e.g. via the Gradio UI).
+3. Run `cameracommander snapshot settings.yaml test.jpg` to verify camera settings.
+4. Run `cameracommander timelapse settings.yaml` to start a timelapse.
+5. Use ffmpeg to create a video from the images.
+
+Here is one example result of a timelapse created with this tool without any post processing:
+
+![Example](docs/nothernlights.gif)
+
+Here you see my fully self designed automatic tripod contraption. This is version 0 - prototype design.
+
+![Example](docs/tripod_v0_small_small.gif)
+
 ## Example `settings.yaml`
 
 ```yaml
@@ -28,18 +44,6 @@ timelapse:
   output_dir: "./output"
   video_fps: 25
 ```
-
-## Example Workflow (timelapse)
-1. Connect camera via USB and attach the tripod controller.
-2. Create or adjust `settings.yaml` (e.g. via the Gradio UI).
-3. Run `cameracommander snapshot settings.yaml test.jpg` to verify camera settings.
-4. Run `cameracommander timelapse settings.yaml` to start a timelapse.
-5. Use ffmpeg to create a video from the images.
-
-Here is one example result of a timelapse created with this tool without any post processing:
-
-![Example](docs/nothernlights.gif)
-
 
 ## Camera Wrapper
 
@@ -69,7 +73,7 @@ CameraCommander includes a Gradio‑based web interface that helps build configu
 $ cameracommander ui [--share]
 ```
 
-![Gradio UI placeholder](docs/gradio_ui_placeholder.png)
+![Gradio UI placeholder](docs/config_gen_small.gif)
 
 ## Commands
 
