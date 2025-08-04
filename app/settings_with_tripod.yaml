@@ -1,0 +1,35 @@
+# -------------------------------------------------
+#  Timelapse Session – default config
+#  Save as: timelapse_default.yml
+# -------------------------------------------------
+
+camera:                # forwarded verbatim to CameraWrapper.apply_settings(...)
+  main.imgsettings.iso:            800 # lower ISO = less noise (adjust for light)
+  main.capturesettings.shutterspeed:        "1/125"   # string so that 1/125 parses correctly
+  main.capturesettings.aperture:       5.6
+  main.imgsettings.whitebalance: Auto
+  # Focus
+  #focusmode: 'Manual'
+  # focusmode: 'AI Focus'
+
+tripod:                # passed to TripodController(...)
+  serial:
+    port:        "/dev/ttyUSB0"
+    baudrate:    9600
+  microstep:   16
+  # any other vendor-specific keys are allowed here
+
+timelapse:
+  # --- session cadence ----------------------------------------------
+  total_frames:   10        # e.g. 10 min at 1 fps → 24 s @ 25 fps video
+  interval_s:     1.5        # ≥ settle_time_s + exposure time
+  settle_time_s:  0.3        # pause after every move
+
+  # --- motion --------------------------------------------------------
+  start:   { pan: 0.0,  tilt: 0.0 }     # absolute angles, degrees
+  target:  { pan: 60.0, tilt: 45.0 }
+
+  # --- output --------------------------------------------------------
+  output_dir: "./output"     # created if missing
+  video_fps:   25
+  ffmpeg_extra: "-c:v libx264 -crf 18 -pix_fmt yuv420p"  # optional flags
