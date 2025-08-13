@@ -102,7 +102,12 @@ def timelapse(config: Path) -> None:
         video = session.run(_progress)
     except TimelapseError as exc:  # pragma: no cover - hardware dependent
         raise click.ClickException(str(exc)) from exc
-    click.echo(f"\nDone. Video at {video}")
+    frame_dir = session.output_dir.resolve()
+    if video is None:
+        click.echo("\nDone.")
+    else:
+        click.echo(f"\nDone. Video at {video}")
+    click.echo(f"Frames at {frame_dir}")
 
 
 @cli.command(name="ui")

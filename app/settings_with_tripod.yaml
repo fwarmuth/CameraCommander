@@ -31,5 +31,6 @@ timelapse:
 
   # --- output --------------------------------------------------------
   output_dir: "./output"     # created if missing
+  render_video: true         # set false to skip ffmpeg step
   video_fps:   25
   ffmpeg_extra: "-c:v libx264 -crf 18 -pix_fmt yuv420p"  # optional flags

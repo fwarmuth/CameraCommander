@@ -1,7 +1,4 @@
 from camerawrapper import CameraWrapper
-from tripodwrapper import TripodController
-from timelapse import TimelapseSession, TimelapseError
-import sys
 from pathlib import Path
 import time
 import logging

@@ -14,10 +14,12 @@ from __future__ import annotations
 import csv
 import json
 import logging
+import os
 import re
 import shlex
 import shutil
 import signal
+import socket
 import subprocess
 import threading
 import time
@@ -87,7 +89,9 @@ class TimelapseSession:
         self._stop_now: bool = False
 
         # Convenience shortcuts
-        self._tl: SimpleNamespace = SimpleNamespace(**self._cfg["timelapse"])
+        tl_cfg = self._cfg["timelapse"].copy()
+        tl_cfg.setdefault("render_video", True)
+        self._tl: SimpleNamespace = SimpleNamespace(**tl_cfg)
 
         self.output_dir: Path = Path(self._tl.output_dir).expanduser().resolve()
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -128,9 +132,14 @@ class TimelapseSession:
         # ---- metadata sink ----------------------------------------------
         self._open_metadata_sink()
 
-    def run(self, progress_cb: Callable[[int, int], None] | None = None) -> Path:
+    def run(self, progress_cb: Callable[[int, int], None] | None = None) -> Path | None:
         """
-        Execute the main capture → move loop.  Returns the rendered video Path.
+        Execute the main capture → move loop.
+
+        Returns
+        -------
+        Path | None
+            Path to the rendered video, or ``None`` if video rendering is disabled.
 
         Parameters
         ----------
@@ -196,7 +205,32 @@ class TimelapseSession:
             self._close_metadata_sink()
 
         # ---- video render --------------------------------------------------
-        return self.finalize_video()
+        if getattr(self._tl, "render_video", True):
+            video_path = self.finalize_video()
+        else:
+            logger.info("Skipping video rendering per configuration")
+            video_path = None
+
+        frames_dir = self.output_dir.resolve()
+        logger.info("Frames at %s", frames_dir)
+
+        fps = getattr(self._tl, "video_fps", 30)
+        cmd = ["ffmpeg", "-framerate", str(fps), "-i", "frame_%04d.jpg"]
+        if getattr(self._tl, "ffmpeg_extra", None):
+            cmd += shlex.split(self._tl.ffmpeg_extra)
+        cmd.append("timelapse.mp4")
+        logger.info("Render video with: %s", " ".join(cmd))
+
+        user = os.environ.get("USER", "<user>")
+        host = socket.gethostname()
+        logger.info(
+            "Download frames with: rsync -avP %s@%s:%s/ ./",
+            user,
+            host,
+            frames_dir,
+        )
+
+        return video_path
 
     # ------------------------------------------------------------------ #
     # Helpers – frame capture & metadata
@@ -368,6 +402,9 @@ class TimelapseSession:
                 raise TimelapseError(f"Missing required '{section}' section")
 
         tl = cfg["timelapse"]
+        render_video = tl.get("render_video", True)
+        if "render_video" in tl and not isinstance(render_video, bool):
+            raise TimelapseError("timelapse.render_video must be of type bool")
         required = {
             "total_frames": int,
             "interval_s": (int, float),
@@ -375,8 +412,9 @@ class TimelapseSession:
             "start": dict,
             "target": dict,
             "output_dir": str,
-            "video_fps": int,
         }
+        if render_video:
+            required["video_fps"] = int
         for key, typ in required.items():
             if key not in tl or not isinstance(tl[key], typ):
                 raise TimelapseError(f"timelapse.{key} must be of type {typ}")

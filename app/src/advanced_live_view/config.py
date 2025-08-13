@@ -26,6 +26,7 @@ def build_settings(
     interval: float,
     settle: float,
     output_dir: str,
+    render_video: bool,
     video_fps: int,
 ) -> Dict[str, Any]:
     """Build a settings dictionary used for export and timelapse runs."""
@@ -47,7 +48,8 @@ def build_settings(
             "start": {"pan": float(start_pan), "tilt": float(start_tilt)},
             "target": {"pan": float(end_pan), "tilt": float(end_tilt)},
             "output_dir": output_dir,
-            "video_fps": int(video_fps),
+            "render_video": bool(render_video),
+            **({"video_fps": int(video_fps)} if render_video else {}),
         },
     }
 
