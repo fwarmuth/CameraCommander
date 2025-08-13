@@ -123,6 +123,7 @@ def create_gradio_interface() -> gr.Blocks:
                         output_dir_input = gr.Textbox(
                             value="./output", label="Output Dir"
                         )
+                        render_video_input = gr.Checkbox(value=True, label="Render Video")
                         video_fps_input = gr.Number(value=25, label="Video FPS")
 
                     with gr.Accordion("Prototype Timelapse", open=False):
@@ -221,6 +222,7 @@ def create_gradio_interface() -> gr.Blocks:
             interval,
             settle,
             output_dir,
+            render_video,
             video_fps,
         ):
             # Assemble a settings mapping and serialise to YAML
@@ -239,6 +241,7 @@ def create_gradio_interface() -> gr.Blocks:
                 interval,
                 settle,
                 output_dir,
+                render_video,
                 video_fps,
             )
             return export_settings(data)
@@ -258,6 +261,7 @@ def create_gradio_interface() -> gr.Blocks:
             interval,
             settle,
             output_dir,
+            render_video,
             video_fps,
             proto_frames,
         ):
@@ -278,6 +282,7 @@ def create_gradio_interface() -> gr.Blocks:
                 interval,
                 settle,
                 output_dir,
+                render_video,
                 video_fps,
             )
             return await run_prototype_timelapse(cfg, proto_frames)
@@ -304,6 +309,11 @@ def create_gradio_interface() -> gr.Blocks:
             [end_pan_input, end_tilt_input, serial_port_input, microstep_input],
             tripod_status,
         )
+        render_video_input.change(
+            lambda v: gr.update(visible=v),
+            render_video_input,
+            video_fps_input,
+        )
         export_btn.click(
             export_settings_handler,
             [
@@ -321,6 +331,7 @@ def create_gradio_interface() -> gr.Blocks:
                 interval_input,
                 settle_input,
                 output_dir_input,
+                render_video_input,
                 video_fps_input,
             ],
             export_file,
@@ -342,6 +353,7 @@ def create_gradio_interface() -> gr.Blocks:
                 interval_input,
                 settle_input,
                 output_dir_input,
+                render_video_input,
                 video_fps_input,
                 proto_frames_input,
             ],

@@ -10,7 +10,10 @@ Main function is to capture snapshots and start time‑lapse recordings by conti
 2. Create or adjust `settings.yaml` (e.g. via the Gradio UI).
 3. Run `cameracommander snapshot settings.yaml test.jpg` to verify camera settings.
 4. Run `cameracommander timelapse settings.yaml` to start a timelapse.
-5. Use ffmpeg to create a video from the images.
+5. By default a video is rendered using ffmpeg. Set `timelapse.render_video` to
+   `false` to skip this step on low-resource hardware. The CLI still prints the
+   absolute frame directory, a suggested `ffmpeg` command, and an `rsync` command
+   to download the images.
 
 Here is one example result of a timelapse created with this tool without any post processing:
 
@@ -42,6 +45,7 @@ timelapse:
   start: { pan: 0.0, tilt: 0.0 }
   target: { pan: 60.0, tilt: 45.0 }
   output_dir: "./output"
+  render_video: true  # set false to keep only frames
   video_fps: 25
 ```
 
