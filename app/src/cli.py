@@ -127,15 +127,16 @@ def timelapse(config: Path) -> None:
 
 
 @app.command(name="ui")
-def launch_ui(share: bool = typer.Option(False, help="Enable public sharing")) -> None:
-    """Launch Gradio configuration builder."""
+def launch_ui(
+    share: bool = typer.Option(False, help="Enable public sharing")
+) -> None:
+    """Start the advanced live view interface."""
 
-    # Importing ``advanced_live_view`` pulls in Gradio which is large. Only load
-    # it when the UI command is executed.
-    from advanced_live_view import timelapse_config_ui
+    # Importing the Gradio UI and camera control stack is expensive. Defer the
+    # heavy work until this sub-command is actually invoked.
+    from advanced_live_view.__main__ import main as av_main
 
-    demo = timelapse_config_ui.create_gradio_interface()
-    demo.launch(share=share)
+    av_main(share=share)
 
 
 def main() -> None:  # pragma: no cover - thin wrapper for entry points
