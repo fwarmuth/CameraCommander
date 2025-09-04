@@ -154,7 +154,6 @@ name = "cameracommander"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "click" },
     { name = "fastapi" },
     { name = "gphoto2" },
     { name = "gradio" },
@@ -168,12 +167,12 @@ dependencies = [
     { name = "pyyaml" },
     { name = "ruff" },
     { name = "tqdm" },
+    { name = "typer" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "click", specifier = ">=8.1.7" },
     { name = "fastapi", specifier = ">=0.110.0" },
     { name = "gphoto2", specifier = ">=2.5.0" },
     { name = "gradio", specifier = ">=5.42.0" },
@@ -187,6 +186,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "ruff", specifier = ">=0.6.7" },
     { name = "tqdm", specifier = ">=4.66.5" },
+    { name = "typer", specifier = ">=0.12.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.22.0" },
 ]
 
