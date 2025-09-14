@@ -37,20 +37,20 @@
 #define FW_VERSION "1.0.1"
 
 /* ─── Pin mapping (NodeMCU v3) ─────────────────────────────────────── */
-#define TT_STEP_PIN     D1
-#define TT_DIR_PIN      D2
+#define TT_STEP_PIN     D4
+#define TT_DIR_PIN      D5
 #define TT_ENABLE_PIN   D0
 
-#define VT_STEP_PIN     D3
-#define VT_DIR_PIN      D4
+#define VT_STEP_PIN     D6
+#define VT_DIR_PIN      D7
 #define VT_ENABLE_PIN   D8
 
-#define MS1_PIN         D6
-#define MS2_PIN         D5
-#define MS3_PIN         D7
+#define MS1_PIN         D1
+#define MS2_PIN         D2
+#define MS3_PIN         D3
 
 /* ─── Mechanics ────────────────────────────────────────────────────── */
-constexpr long  MOTOR_STEPS_PER_REV = 100;
+constexpr long  MOTOR_STEPS_PER_REV = 200;
 constexpr float GEAR_RATIO_TT       = 11.335f;
 constexpr float GEAR_RATIO_VT       = 6.2f * 7.5f;
 
@@ -83,6 +83,8 @@ long degToMicrosteps(GearedStepper& stp, float deg)
 
 constexpr float RATIO_TT_TO_VT = GEAR_RATIO_VT / GEAR_RATIO_TT;
 constexpr float ROT_SPEED0 = 150.0f, ROT_ACCEL0 = 80.0f;
+static float gRotSpeed = ROT_SPEED0;
+static float gRotAccel = ROT_ACCEL0;
 
 void setRotaryMotorSpeed(float v, float a)
 {
@@ -96,10 +98,10 @@ void setRotaryMotorSpeed(float v, float a)
 void setup()
 {
     Serial.begin(9600);
-    while (!Serial) ;
+    delay(200);
 
     rot.s.begin(); til.s.begin();
-    setRotaryMotorSpeed(ROT_SPEED0, ROT_ACCEL0);
+    setRotaryMotorSpeed(gRotSpeed, gRotAccel);
 
     /* full command list on boot */
     Serial.println(F(
@@ -166,7 +168,7 @@ void loop()
             rot.s.move(rot.dir * r);                                ack("OK ROT REV");  return;
         }
         case 'r': case 'R': rot.dir = -rot.dir;                     ack("OK ROT DIR");  return;
-        case 'x': case 'X': rot.s.stop();                           ack("OK ROT STOP"); return;
+        case 'x':           rot.s.stop();                           ack("OK ROT STOP"); return;
     }
 
     /* -------- Tilt axis (til) ---------------------------------------- */
@@ -184,7 +186,9 @@ void loop()
     /* -------- Speed adjust ------------------------------------------- */
     if (c == '+' || c == '-') {
         float f = (c == '+') ? 1.10f : 0.90f;
-        setRotaryMotorSpeed(turntableStepper.maxSpeed() * f, ROT_ACCEL0 * f);
+        gRotSpeed *= f;
+        gRotAccel *= f;
+        setRotaryMotorSpeed(gRotSpeed, gRotAccel);
         ack("OK SPEED"); return;
     }
 
