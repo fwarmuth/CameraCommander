@@ -145,7 +145,9 @@ void loop()
         long ts = degToMicrosteps(tiltStepper,    tiltDeg);
         turntableStepper.move(ps); tiltStepper.move(ts);
         while (turntableStepper.distanceToGo() || tiltStepper.distanceToGo()) {
-            turntableStepper.run(); tiltStepper.run();
+            turntableStepper.run();
+            tiltStepper.run();
+            yield();
         }
         delay(250); // Settle time
         ack("DONE"); return;

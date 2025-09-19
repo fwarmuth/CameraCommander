@@ -6,14 +6,14 @@ GearedStepper::GearedStepper(uint8_t step_pin, uint8_t dir_pin, uint8_t enable_p
                              uint8_t ms1_pin,  uint8_t ms2_pin,  uint8_t ms3_pin,
                              long    base_steps_per_rot,
                              float   gear_ratio)
-    : _stepper(AccelStepper::DRIVER, step_pin, dir_pin),
-      _enable_pin(enable_pin),
+    : _enable_pin(enable_pin),
       _ms1_pin(ms1_pin),
       _ms2_pin(ms2_pin),
       _ms3_pin(ms3_pin),
       _base_steps_per_rot(base_steps_per_rot),
       _gear_ratio(gear_ratio),
-      _microstep_resolution(1)       // default = full-step
+      _microstep_resolution(1),      // default = full-step
+      _stepper(AccelStepper::DRIVER, step_pin, dir_pin)
 {
     /* STEP and DIR are already OUTPUT by AccelStepper */
 }
@@ -66,10 +66,10 @@ int GearedStepper::getMicrostepResolution() const { return _microstep_resolution
 /* ── Gearbox helpers ──────────────────────────────────────────────────── */
 float GearedStepper::getGearRatio() const               { return _gear_ratio; }
 long  GearedStepper::getBaseStepsPerRotation() const     { return _base_steps_per_rot; }
-float GearedStepper::maxSpeed()                  const { return maxSpeed(); }
-float GearedStepper::acceleration()              const { return acceleration(); }
+float GearedStepper::maxSpeed()                        { return _stepper.maxSpeed(); }
+float GearedStepper::acceleration()                    { return _stepper.acceleration(); }
 long  GearedStepper::getOutputStepsPerRotation() const
 {
     return lroundf(_base_steps_per_rot * _gear_ratio);
 }
- 
+
