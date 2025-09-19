@@ -54,8 +54,8 @@ public:
     float getGearRatio()              const;
     long  getBaseStepsPerRotation()   const;       // motor side
     long  getOutputStepsPerRotation() const;       // turntable side
-    float maxSpeed()       const;
-    float acceleration()   const;
+    float maxSpeed();
+    float acceleration();
 
 private:
     /* pins */
