@@ -6,6 +6,7 @@ link. Requires ``pyserial``.
 from __future__ import annotations
 
 import logging
+import math
 import time
 from pathlib import Path
 from threading import RLock
@@ -40,12 +41,13 @@ class TripodController:
 
     Notes
     -----
-    The class maintains the current absolute pan and tilt positions in degrees
-    by accumulating relative moves in software. Because the device exposes only
-    relative motion, this state is purely software‑based. Call
-    :py:meth:`reset_position` after homing to keep values in sync.
+    The controller keeps track of the firmware-reported absolute pan and tilt
+    angles. The firmware now accepts absolute targets for ``M`` commands, so the
+    cached position is updated whenever a move completes or when :py:meth:`status`
+    is called. Invoke :py:meth:`reset_position` or toggle the drivers if an
+    external action changes the physical orientation.
 
-    All public methods are thread‑safe.
+    All public methods are thread-safe.
     """
 
     _ACK_OK = b"OK"
@@ -140,6 +142,16 @@ class TripodController:
                 raise RuntimeError(f"Unexpected response to '{cmd}': {resp}")
         return resp
 
+
+    @staticmethod
+    def _format_angle(angle: float) -> str:
+        """Format degrees for firmware commands."""
+        return f"{angle:.6f}"
+
+    def _send_absolute_move(self, pan_deg: float, tilt_deg: float) -> None:
+        """Send an absolute move command to the firmware."""
+        self._send(f"M {self._format_angle(pan_deg)} {self._format_angle(tilt_deg)}")
+
     # ------------------------------------------------------------------ #
     # Public API – information
     # ------------------------------------------------------------------ #
@@ -168,34 +180,47 @@ class TripodController:
             return False
         raise RuntimeError(f"Unexpected Q response: {resp}")
 
+    def status(self) -> Tuple[float, float, bool]:
+        """Query firmware for absolute pan/tilt angles and driver state."""
+        with self._lock:
+            resp = self._send("S", expect_ok=False)
+            if not resp.startswith("STATUS"):
+                raise RuntimeError(f"Unexpected status response: {resp}")
+            parts = resp.split()
+            if len(parts) < 4:
+                raise RuntimeError(f"Incomplete status response: {resp}")
+            pan = float(parts[1])
+            tilt = float(parts[2])
+            drivers = parts[3] not in {"0", "OFF", "DISABLED"}
+            self._pan_deg = pan
+            self._tilt_deg = tilt
+            self._drivers_enabled = drivers
+            return pan, tilt, drivers
+
     # ------------------------------------------------------------------ #
     # Public API – motion
     # ------------------------------------------------------------------ #
     def move(self, pan_deg: float = 0.0, tilt_deg: float = 0.0) -> None:
-        """Move axes by the specified *relative* degrees *non‑blocking*."""
+        """Move axes by the specified relative degrees using an absolute target."""
         if pan_deg == 0.0 and tilt_deg == 0.0:
             return
         with self._lock:
-            self._send(f"M {pan_deg} {tilt_deg}")
-            self._pan_deg += pan_deg
-            self._tilt_deg += tilt_deg
+            target_pan = self._pan_deg + pan_deg
+            target_tilt = self._tilt_deg + tilt_deg
+            self._send_absolute_move(target_pan, target_tilt)
+            self._pan_deg = target_pan
+            self._tilt_deg = target_tilt
 
     def move_to(self, pan_deg: float | None = None, tilt_deg: float | None = None) -> None:
-        """Move axes to the given *absolute* pan/tilt angles.
-
-        Parameters
-        ----------
-        pan_deg, tilt_deg
-            Absolute angles in degrees. ``None`` leaves an axis unchanged.
-        """
+        """Move axes to the given absolute pan/tilt angles."""
         with self._lock:
-            delta_pan = 0.0 if pan_deg is None else pan_deg - self._pan_deg
-            delta_tilt = 0.0 if tilt_deg is None else tilt_deg - self._tilt_deg
-            if delta_pan == 0.0 and delta_tilt == 0.0:
+            target_pan = self._pan_deg if pan_deg is None else pan_deg
+            target_tilt = self._tilt_deg if tilt_deg is None else tilt_deg
+            if math.isclose(target_pan, self._pan_deg, abs_tol=1e-7) and math.isclose(target_tilt, self._tilt_deg, abs_tol=1e-7):
                 return
-            self._send(f"M {delta_pan} {delta_tilt}")
-            self._pan_deg += delta_pan
-            self._tilt_deg += delta_tilt
+            self._send_absolute_move(target_pan, target_tilt)
+            self._pan_deg = target_pan
+            self._tilt_deg = target_tilt
 
     def move_blocking(self, pan_deg: float = 0.0, tilt_deg: float = 0.0,
                       poll_interval: float = 0.05, timeout: float | None = None) -> None:
@@ -204,7 +229,7 @@ class TripodController:
         Parameters
         ----------
         pan_deg, tilt_deg
-            Relative angles in degrees (same semantics as :py:meth:`move`).
+            Relative offsets in degrees; they are applied to the cached absolute target before the command is issued.
         poll_interval
             Deprecated; retained for compatibility. Firmware now executes
             moves synchronously so the value is ignored.
@@ -284,6 +309,8 @@ class TripodController:
     def enable_drivers(self, enable: bool = True) -> None:
         self._send("e" if enable else "d")
         self._drivers_enabled = enable
+        self._pan_deg = 0.0
+        self._tilt_deg = 0.0
 
     # ------------------------------------------------------------------ #
     # State & utility

@@ -42,7 +42,7 @@ pio device monitor
 | Command | Description |
 |---------|-------------|
 | `V` | Print firmware version |
-| `M <pan_deg> <tilt_deg>` | Move pan and tilt by degrees |
+| `M <pan_deg> <tilt_deg>` | Move pan and tilt to absolute angles |
 | `1` `2` `4` `8` `6` | Set micro‑step resolution (6 = 16) |
 | `n` / `w` | One micro‑step on pan/tilt axis |
 | `c` / `p` | One full revolution on pan/tilt axis |
@@ -50,6 +50,7 @@ pio device monitor
 | `x` / `z` | Stop pan/tilt axis |
 | `X` | Stop both axes |
 | `+` / `-` | Increase/decrease speed by 10% |
+| `S` | Report current absolute angles and driver state |
 | `d` / `e` | Disable/enable both drivers |
 
 ## Project Structure
