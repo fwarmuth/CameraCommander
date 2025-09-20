@@ -15,6 +15,7 @@ import serial
 from serial import SerialException
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 class TripodController:
@@ -48,6 +49,7 @@ class TripodController:
     """
 
     _ACK_OK = b"OK"
+    _ACK_DONE = b"DONE"
     _ACK_ERR = b"ERR"
 
     # ------------------------------------------------------------------ #
@@ -128,7 +130,7 @@ class TripodController:
                 self.close()
                 raise
 
-        if expect_ok and not resp.startswith(self._ACK_OK.decode()):
+        if expect_ok and not (resp.startswith(self._ACK_OK.decode()) or resp.startswith(self._ACK_DONE.decode())):
             raise RuntimeError(f"Unexpected response to '{cmd}': {resp}")
         return resp
 
