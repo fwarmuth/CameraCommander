@@ -130,8 +130,14 @@ class TripodController:
                 self.close()
                 raise
 
-        if expect_ok and not (resp.startswith(self._ACK_OK.decode()) or resp.startswith(self._ACK_DONE.decode())):
-            raise RuntimeError(f"Unexpected response to '{cmd}': {resp}")
+        if expect_ok:
+            normalized_cmd = cmd.strip()
+            command_prefix = normalized_cmd[:1].upper() if normalized_cmd else ""
+            ack_ok = resp.startswith(self._ACK_OK.decode())
+            if not ack_ok and command_prefix == "M":
+                ack_ok = resp.startswith(self._ACK_DONE.decode())
+            if not ack_ok:
+                raise RuntimeError(f"Unexpected response to '{cmd}': {resp}")
         return resp
 
     # ------------------------------------------------------------------ #
