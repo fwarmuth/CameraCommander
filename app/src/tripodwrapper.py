@@ -148,11 +148,23 @@ class TripodController:
         return self._send("V", expect_ok=False)
 
     def query_busy(self) -> bool:
-        """Return *True* while axes are moving."""
+        """Return *True* while axes are moving.
+
+        Notes
+        -----
+        The current firmware executes ``M`` moves synchronously and responds
+        with ``DONE`` once motion has completed. It no longer exposes a
+        ``Q``/"busy" query. If such a request is issued manually and the
+        firmware answers with an ``ERR`` message, we treat that as "not busy"
+        for backwards compatibility.
+        """
         resp = self._send("Q", expect_ok=False)
         if resp == "BUSY":
             return True
         if resp == "DONE":
+            return False
+        if resp.startswith(self._ACK_ERR.decode()):
+            logger.debug("Firmware responded to 'Q' with %s – assuming not busy", resp)
             return False
         raise RuntimeError(f"Unexpected Q response: {resp}")
 
@@ -187,39 +199,37 @@ class TripodController:
 
     def move_blocking(self, pan_deg: float = 0.0, tilt_deg: float = 0.0,
                       poll_interval: float = 0.05, timeout: float | None = None) -> None:
-        """Move axes and *block* until the device reports that movement is complete.
+        """Move axes and *block* until the firmware responds with ``DONE``.
 
         Parameters
         ----------
         pan_deg, tilt_deg
             Relative angles in degrees (same semantics as :py:meth:`move`).
         poll_interval
-            Seconds between BUSY polls (default 50 ms).
+            Deprecated; retained for compatibility. Firmware now executes
+            moves synchronously so the value is ignored.
         timeout
-            Maximum seconds to wait. ``None`` (default) waits indefinitely.
+            Maximum seconds to wait for a ``DONE`` reply. ``None`` (default)
+            waits indefinitely.
 
         Raises
         ------
         TimeoutError
-            If *timeout* elapses before the controller returns ``DONE``.
+            If waiting for the ``DONE`` reply takes longer than *timeout*.
         """
         start = time.monotonic()
         self.move(pan_deg, tilt_deg)
-        while self.query_busy():
-            if timeout is not None and (time.monotonic() - start) > timeout:
-                raise TimeoutError("move_blocking timed out")
-            time.sleep(poll_interval)
+        if timeout is not None and (time.monotonic() - start) > timeout:
+            raise TimeoutError("move_blocking timed out")
 
     def move_to_blocking(self, pan_deg: float | None = None, tilt_deg: float | None = None,
                          poll_interval: float = 0.05,
                          timeout: float | None = None) -> None:
-        """Absolute :py:meth:`move_to` variant that blocks until movement completes."""
+        """Absolute :py:meth:`move_to` variant that waits for the ``DONE`` reply."""
         start = time.monotonic()
         self.move_to(pan_deg, tilt_deg)
-        while self.query_busy():
-            if timeout is not None and (time.monotonic() - start) > timeout:
-                raise TimeoutError("move_to_blocking timed out")
-            time.sleep(poll_interval)
+        if timeout is not None and (time.monotonic() - start) > timeout:
+            raise TimeoutError("move_to_blocking timed out")
 
     def stop(self) -> None:
         """Emergency stop – halt both axes immediately."""
