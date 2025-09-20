@@ -85,15 +85,20 @@ def tripod(config: Path) -> None:
             cmd = input("pan tilt> ").strip()
             if cmd.lower() in {"q", "quit", "exit"}:
                 break
-            try:
-                pan_str, tilt_str = cmd.split()
-                pan = float(pan_str)
-                tilt = float(tilt_str)
-            except ValueError:
-                typer.echo("Please enter two numbers or 'q' to quit.")
-                continue
-            controller.move_blocking(pan, tilt)
-            typer.echo(f"Moved pan {pan}° tilt {tilt}°")
+            elif cmd.lower() == "e":
+                controller.enable_drivers(True)
+            elif cmd.lower() == "d":
+                controller.enable_drivers(False)
+            else:
+                try:
+                    pan_str, tilt_str = cmd.split()
+                    pan = float(pan_str)
+                    tilt = float(tilt_str)
+                except ValueError:
+                    typer.echo("Please enter two numbers or 'q' to quit.")
+                    continue
+                controller.move_blocking(pan, tilt)
+                typer.echo(f"Moved pan {pan}° tilt {tilt}°")
     finally:
         controller.enable_drivers(False)
         controller.close()
