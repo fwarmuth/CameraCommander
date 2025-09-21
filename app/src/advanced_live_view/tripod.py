@@ -49,3 +49,13 @@ async def move_tripod_to(pan: float, tilt: float, serial_port: str, microstep: i
     except Exception as exc:  # pragma: no cover - hardware dependent
         logger.error("Tripod move failed: %s", exc)
         return f"Tripod error: {exc}"
+
+async def get_tripod_status(serial_port: str, microstep: int) -> str:
+    try:
+        controller = await get_tripod(serial_port, microstep)
+        pan, tilt, drivers = await asyncio.to_thread(controller.status)
+        drivers_state = "enabled" if drivers else "disabled"
+        return f"Pan {pan:.2f} deg, Tilt {tilt:.2f} deg, drivers {drivers_state}"
+    except Exception as exc:  # pragma: no cover - hardware dependent
+        logger.error("Tripod status query failed: %s", exc)
+        return f"Tripod error: {exc}"

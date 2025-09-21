@@ -15,7 +15,7 @@ import gradio as gr
 
 from .camera import focus_camera, get_live_frame
 from .config import build_settings, export_settings, run_prototype_timelapse
-from .tripod import move_tripod_to, set_tripod_drivers
+from .tripod import get_tripod_status, move_tripod_to, set_tripod_drivers
 
 # Global crop selection used by ``get_live_frame``
 CROP_STATE: Dict[str, Any] | None = None
@@ -26,7 +26,7 @@ def create_gradio_interface() -> gr.Blocks:
     # Limit the height of the configuration panel so that expanding multiple
     # accordions does not push the live view off screen. The panel becomes
     # scrollable instead, keeping the live preview in view.
-    css = ".config-scroll{overflow-y:auto; max-height:600px;}"
+    css = ".config-scroll{overflow-y:auto; max-height:800px;}"
     with gr.Blocks(css=css) as demo:
         # Store current crop rectangle between interactions
         crop_state_val = gr.State(None)
@@ -103,6 +103,7 @@ def create_gradio_interface() -> gr.Blocks:
 
                     with gr.Accordion("Tripod Settings", open=True):
                         motors_enabled_state = gr.State(True)
+                        tripod_status = gr.Textbox(label="Tripod Status")
                         with gr.Accordion("Details", open=False):
                             with gr.Row():
                                 with gr.Column():
@@ -115,6 +116,8 @@ def create_gradio_interface() -> gr.Blocks:
                                     )
                             with gr.Row():
                                 motor_toggle_btn = gr.Button("Disable Motors", variant="secondary")
+                            with gr.Row():
+                                get_tripod_status_btn = gr.Button("Get Status", variant="secondary")
                         with gr.Row():
                             with gr.Column():
                                 start_pan_input = gr.Number(value=0.0, label="Start Pan (deg)")
@@ -124,7 +127,6 @@ def create_gradio_interface() -> gr.Blocks:
                                 end_pan_input = gr.Number(value=0.0, label="End Pan (deg)")
                                 end_tilt_input = gr.Number(value=0.0, label="End Tilt (deg)")
                                 go_end_btn = gr.Button("Go to End Position")
-                        tripod_status = gr.Textbox(label="Tripod Status")
                     with gr.Accordion("Timelapse Settings", open=False):
                         total_frames_input = gr.Number(value=10, label="Total Frames")
                         interval_input = gr.Number(value=1.5, label="Interval (s)")
@@ -313,6 +315,9 @@ def create_gradio_interface() -> gr.Blocks:
                 )
             return gr.update(), message, current_enabled
 
+        async def fetch_tripod_status(serial_port: str, microstep: int):
+            return await get_tripod_status(serial_port, microstep)
+
         live_image.select(set_crop, [crop_size_slider], crop_state_val)
         reset_crop_btn.click(reset_crop, None, crop_state_val)
         apply_settings_btn.click(
@@ -339,6 +344,11 @@ def create_gradio_interface() -> gr.Blocks:
             toggle_tripod_drivers,
             [motors_enabled_state, serial_port_input, microstep_input],
             [motor_toggle_btn, tripod_status, motors_enabled_state],
+        )
+        get_tripod_status_btn.click(
+            fetch_tripod_status,
+            [serial_port_input, microstep_input],
+            tripod_status,
         )
         render_video_input.change(
             lambda v: gr.update(visible=v),
