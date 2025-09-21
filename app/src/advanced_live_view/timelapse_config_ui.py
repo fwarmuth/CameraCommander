@@ -307,11 +307,11 @@ def create_gradio_interface() -> gr.Blocks:
             if success:
                 label = "Disable Motors" if target_state else "Enable Motors"
                 return (
-                    gr.Button.update(value=label),
+                    gr.update(value=label),
                     message,
                     target_state,
                 )
-            return gr.Button.update(), message, current_enabled
+            return gr.update(), message, current_enabled
 
         live_image.select(set_crop, [crop_size_slider], crop_state_val)
         reset_crop_btn.click(reset_crop, None, crop_state_val)
@@ -403,3 +403,4 @@ def create_gradio_interface() -> gr.Blocks:
         demo.load(live_view_stream, None, live_image)
 
     return demo
+
