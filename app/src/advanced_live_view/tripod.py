@@ -28,6 +28,18 @@ async def close_tripod() -> None:
             tripod = None
 
 
+
+async def set_tripod_drivers(enable: bool, serial_port: str, microstep: int) -> tuple[str, bool]:
+    """Enable or disable the tripod motor drivers."""
+    try:
+        controller = await get_tripod(serial_port, microstep)
+        await asyncio.to_thread(controller.enable_drivers, enable)
+        state = 'enabled' if enable else 'disabled'
+        return f'Tripod drivers {state}', True
+    except Exception as exc:  # pragma: no cover - hardware dependent
+        logger.error('Tripod driver toggle failed: %s', exc)
+        return f'Tripod error: {exc}', False
+
 async def move_tripod_to(pan: float, tilt: float, serial_port: str, microstep: int) -> str:
     """Move tripod to the requested relative pan/tilt angles."""
     try:
