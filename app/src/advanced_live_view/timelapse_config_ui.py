@@ -15,7 +15,7 @@ import gradio as gr
 
 from .camera import focus_camera, get_live_frame
 from .config import build_settings, export_settings, run_prototype_timelapse
-from .tripod import get_tripod_status, move_tripod_to, set_tripod_drivers
+from .tripod import get_tripod_status, move_tripod_to, set_tripod_drivers, set_tripod_microstep
 
 # Global crop selection used by ``get_live_frame``
 CROP_STATE: Dict[str, Any] | None = None
@@ -315,6 +315,13 @@ def create_gradio_interface() -> gr.Blocks:
                 )
             return gr.update(), message, current_enabled
 
+        async def update_tripod_microstep(microstep_value, serial_port: str):
+            try:
+                microstep_int = int(microstep_value)
+            except (TypeError, ValueError):
+                return "Tripod error: invalid microstep selection"
+            return await set_tripod_microstep(microstep_int, serial_port)
+
         async def fetch_tripod_status(serial_port: str, microstep: int):
             return await get_tripod_status(serial_port, microstep)
 
@@ -338,6 +345,11 @@ def create_gradio_interface() -> gr.Blocks:
         go_end_btn.click(
             move_tripod_to,
             [end_pan_input, end_tilt_input, serial_port_input, microstep_input],
+            tripod_status,
+        )
+        microstep_input.change(
+            update_tripod_microstep,
+            [microstep_input, serial_port_input],
             tripod_status,
         )
         motor_toggle_btn.click(

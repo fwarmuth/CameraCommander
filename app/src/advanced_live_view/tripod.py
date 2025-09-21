@@ -59,3 +59,15 @@ async def get_tripod_status(serial_port: str, microstep: int) -> str:
     except Exception as exc:  # pragma: no cover - hardware dependent
         logger.error("Tripod status query failed: %s", exc)
         return f"Tripod error: {exc}"
+
+async def set_tripod_microstep(microstep: int, serial_port: str) -> str:
+    try:
+        controller = await get_tripod(serial_port, microstep)
+        await asyncio.to_thread(controller.set_microstep, microstep)
+        return f"Tripod microstep set to {microstep}"
+    except ValueError as exc:
+        return f"Tripod error: {exc}"
+    except Exception as exc:  # pragma: no cover - hardware dependent
+        logger.error("Tripod microstep update failed: %s", exc)
+        return f"Tripod error: {exc}"
+
