@@ -66,7 +66,7 @@ class TripodController:
         # absolute position in degrees
         self._pan_deg: float = 0.0
         self._tilt_deg: float = 0.0
-        self._drivers_enabled: bool = False
+        self._drivers_enabled: bool = True
         self._microstep: int = self._cfg.get("microstep", 1)
 
         # connection ------------------------------------------------------
@@ -150,6 +150,8 @@ class TripodController:
 
     def _send_absolute_move(self, pan_deg: float, tilt_deg: float) -> None:
         """Send an absolute move command to the firmware."""
+        if self._drivers_enabled is False:
+            raise RuntimeError("Cannot move: drivers are disabled")
         self._send(f"M {self._format_angle(pan_deg)} {self._format_angle(tilt_deg)}")
 
     # ------------------------------------------------------------------ #
