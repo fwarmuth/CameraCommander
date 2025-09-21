@@ -5,8 +5,14 @@ from typing import Any, Dict
 
 import yaml
 
-from camerawrapper import CameraError
-from timelapse import TimelapseError, TimelapseSession
+# Import CameraError if available; provide a fallback so the UI can load
+# without the camera stack installed.
+try:  # pragma: no cover - environment dependent
+    from camerawrapper import CameraError  # type: ignore
+except Exception:  # pragma: no cover
+    class CameraError(RuntimeError):
+        pass
+
 from .camera import close_camera, initialize_camera
 from .tripod import close_tripod
 
@@ -79,6 +85,15 @@ async def run_prototype_timelapse(settings: Dict[str, Any], frames: int) -> tupl
 
     images: list[Path] = []
     status: str
+
+    # Import Timelapse pieces lazily so that missing camera stack doesn't
+    # prevent the UI from launching. If unavailable, report a friendly status.
+    try:  # pragma: no cover - environment dependent
+        from timelapse import TimelapseSession, TimelapseError  # type: ignore
+    except Exception as exc:  # pragma: no cover
+        status = f"Timelapse support unavailable: {exc}"
+        return [], status
+
     try:
         session = TimelapseSession(cfg_path)
         await asyncio.to_thread(session.prepare)

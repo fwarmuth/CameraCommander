@@ -6,14 +6,23 @@ from typing import Any, Dict
 import numpy as np
 from PIL import Image
 
-from camerawrapper import CameraWrapper, CameraError
+# Import CameraError if available without pulling in full gphoto2 stack.
+# Avoid importing CameraWrapper at module import time so the UI can start on
+# systems without libgphoto2 installed. We attempt that import lazily during
+# initialization instead.
+try:  # pragma: no cover - import availability depends on environment
+    from camerawrapper import CameraError  # type: ignore
+except Exception:  # pragma: no cover - environment without camera stack
+    class CameraError(RuntimeError):  # fallback used when gphoto2 is absent
+        pass
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Global camera instance and lock
-cam: CameraWrapper | None = None
+# Global camera instance and lock.  Use a broad type so this module remains
+# importable even when the camera stack is unavailable.
+cam: Any | None = None
 camera_lock = asyncio.Lock()
 
 
@@ -23,6 +32,18 @@ async def initialize_camera() -> None:
     if cam is None:
         try:
             logger.info("Initializing camera...")
+            # Import lazily so missing libgphoto2 doesn't prevent the UI from
+            # launching. If unavailable we behave as if no camera is connected.
+            try:  # pragma: no cover - environment dependent
+                from camerawrapper import CameraWrapper  # type: ignore
+            except Exception as imp_exc:  # pragma: no cover
+                logger.warning(
+                    "Camera support unavailable (gphoto2 missing or not importable): %s",
+                    imp_exc,
+                )
+                cam = None
+                return
+
             cam = await asyncio.to_thread(CameraWrapper.select_camera, "Canon")
             await asyncio.to_thread(cam.apply_settings, {"main.actions.viewfinder": 1})
             logger.info("Camera initialized and viewfinder enabled.")

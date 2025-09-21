@@ -101,25 +101,30 @@ def create_gradio_interface() -> gr.Blocks:
                         snapshot_image = gr.Image(label="Snapshot", type="filepath")
                         snapshot_status = gr.Textbox(label="Snapshot Status")
 
-                    with gr.Accordion("Tripod Settings", open=False):
+                    with gr.Accordion("Tripod Settings", open=True):
                         motors_enabled_state = gr.State(True)
+                        with gr.Accordion("Details", open=False):
+                            with gr.Row():
+                                with gr.Column():
+                                    serial_port_input = gr.Textbox(
+                                        value="/dev/ttyUSB0", label="Serial Port"
+                                    )
+                                with gr.Column():
+                                    microstep_input = gr.Dropdown(
+                                        [1, 2, 4, 8, 16], value=16, label="Microstep"
+                                    )
+                            with gr.Row():
+                                motor_toggle_btn = gr.Button("Disable Motors", variant="secondary")
                         with gr.Row():
                             with gr.Column():
-                                serial_port_input = gr.Textbox(
-                                    value="/dev/ttyUSB0", label="Serial Port"
-                                )
-                                microstep_input = gr.Dropdown(
-                                    [1, 2, 4, 8, 16], value=16, label="Microstep"
-                                )
                                 start_pan_input = gr.Number(value=0.0, label="Start Pan (deg)")
                                 start_tilt_input = gr.Number(value=0.0, label="Start Tilt (deg)")
                                 go_start_btn = gr.Button("Go to Start Position")
                             with gr.Column():
                                 end_pan_input = gr.Number(value=0.0, label="End Pan (deg)")
                                 end_tilt_input = gr.Number(value=0.0, label="End Tilt (deg)")
-                                motor_toggle_btn = gr.Button("Disable Motors", variant="secondary")
                                 go_end_btn = gr.Button("Go to End Position")
-                                tripod_status = gr.Textbox(label="Tripod Status")
+                        tripod_status = gr.Textbox(label="Tripod Status")
                     with gr.Accordion("Timelapse Settings", open=False):
                         total_frames_input = gr.Number(value=10, label="Total Frames")
                         interval_input = gr.Number(value=1.5, label="Interval (s)")
