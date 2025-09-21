@@ -1,65 +1,32 @@
 # CameraCommander Firmware
 
-Firmware for the motor control board of CameraCommander. It targets an
-ESP8266 NodeMCU v3 and is built with [PlatformIO](https://platformio.org/)
-using the Arduino framework. Two geared stepper motors are driven through
-standard step/dir/enable drivers (e.g. A4988 or TMC series).
+ESP8266 firmware for a two‑axis stepper tripod. Simple serial protocol, absolute moves, DONE/S/OK replies.
 
-## Features
+## Setup
 
-- Dual‑axis pan and tilt control
-- Serial command interface
-- Adjustable micro‑stepping and motor speed
-- Driver enable/disable control
+- Requires: PlatformIO CLI, NodeMCU v3 (ESP8266), A4988/TMC step/dir/enable drivers.
+- Build/flash/monitor from repo root (PlatformIO points `src_dir` to `firmware/src`):
+  - Build: `pio run`
+  - Flash: `pio upload`
+  - Monitor: `pio device monitor`
 
-## Requirements
-
-- [PlatformIO CLI](https://docs.platformio.org/en/latest/core/installation.html)
-- NodeMCU v3 (ESP8266)
-- Stepper drivers wired as defined in `src/main.cpp`
-- AccelStepper library (installed automatically)
-
-## Building
-
-```sh
-pio run
-```
-
-## Flashing
-
-```sh
-pio upload
-```
-
-## Serial Monitor
-
-```sh
-pio device monitor
-```
-
-## Command Reference
-
-| Command | Description |
-|---------|-------------|
-| `V` | Print firmware version |
-| `M <pan_deg> <tilt_deg>` | Move pan and tilt to absolute angles |
-| `1` `2` `4` `8` `6` | Set micro‑step resolution (6 = 16) |
-| `n` / `w` | One micro‑step on pan/tilt axis |
-| `c` / `p` | One full revolution on pan/tilt axis |
-| `r` / `t` | Toggle direction of pan/tilt axis |
-| `x` / `z` | Stop pan/tilt axis |
-| `X` | Stop both axes |
-| `+` / `-` | Increase/decrease speed by 10% |
-| `S` | Report current absolute angles and driver state |
-| `d` / `e` | Disable/enable both drivers |
-
-## Project Structure
+## Commands
 
 ```
-firmware/
-├── platformio.ini  # PlatformIO configuration
-└── src
-    ├── GearedStepper.h/.cpp  # Stepper helper class
-    └── main.cpp              # Command interpreter and motor control
+V                            # version
+M <pan_deg> <tilt_deg>       # absolute move; replies DONE when finished
+S                            # STATUS <pan> <tilt> <drivers 0|1>
+1 2 4 8 6                    # microstep (6 == 16)
+n/c/r/x                      # pan: step / revolution / toggle dir / stop
+w/p/t/z                      # tilt: step / revolution / toggle dir / stop
+X                            # stop both axes
++ / -                        # faster / slower (10%)
+d / e                        # disable / enable drivers (resets position to 0)
 ```
+
+## Layout
+
+- `src/GearedStepper.h/.cpp` — AccelStepper wrapper with gearing + microstep control
+- `src/main.cpp` — command parser, pin map, motion control
+- Pin mapping and mechanics are defined in `src/main.cpp`.
 

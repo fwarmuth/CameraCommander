@@ -1,29 +1,33 @@
-# CameraComander
+# CameraCommander App
 
-A CLI application for creating time‑lapse videos using a gphoto2 compatible camera and an optional serial‑controlled tripod. So far it has only been tested with a Canon EOS 6D2 and EOS R50 tethered (USB).
-The application allows you to configure camera and tripod settings via a single YAML file to make captures reproducible.
-Main function is to capture snapshots and start time‑lapse recordings by continuously capturing images at a given interval. The images are saved to a folder and can be used to create time‑lapse videos, e.g. using ffmpeg.
+CLI and Gradio UI for time‑lapse capture with a gphoto2 camera and a serial pan/tilt tripod.
 
+Examples:
 
-## Example Workflow (timelapse)
-1. Connect camera via USB and attach the tripod controller.
-2. Create or adjust `settings.yaml` (e.g. via the Gradio UI).
-3. Run `cameracommander snapshot settings.yaml test.jpg` to verify camera settings.
-4. Run `cameracommander timelapse settings.yaml` to start a timelapse.
-5. By default a video is rendered using ffmpeg. Set `timelapse.render_video` to
-   `false` to skip this step on low-resource hardware. The CLI still prints the
-   absolute frame directory, a suggested `ffmpeg` command, and an `rsync` command
-   to download the images.
+![Config UI](docs/config_gen_small.gif)
 
-Here is one example result of a timelapse created with this tool without any post processing:
+## Setup
 
-![Example](docs/nothernlights.gif)
+- Requires: Python 3.11+, libgphoto2, ffmpeg (for video), serial port for the tripod.
+- Run without installing (uv):
+  - `uv run cameracommander --help`
+- Or install locally:
+  - `pip install -e .`
+  - `cameracommander --help`
 
-Here you see my fully self designed automatic tripod contraption. This is version 0 - prototype design.
+## Use
 
-![Example](docs/tripod_v0_small_small.gif)
+- UI (build/export configs, prototype runs):
+  - `cameracommander ui`  (use `--share` to expose a public link)
+  - Opens http://localhost:8000
+- Snapshot:
+  - `cameracommander snapshot settings.yaml out.jpg`
+- Timelapse:
+  - `cameracommander timelapse settings.yaml`
+- Tripod (interactive):
+  - `cameracommander tripod settings.yaml`
 
-## Example `settings.yaml`
+Minimal config (YAML):
 
 ```yaml
 camera:
@@ -33,9 +37,7 @@ camera:
   main.imgsettings.whitebalance: Auto
 
 tripod:
-  serial:
-    port: "/dev/ttyUSB0"
-    baudrate: 9600
+  serial: { port: "/dev/ttyUSB0", baudrate: 9600 }  # Windows: "COM3"
   microstep: 16
 
 timelapse:
@@ -44,88 +46,19 @@ timelapse:
   settle_time_s: 0.3
   start: { pan: 0.0, tilt: 0.0 }
   target: { pan: 60.0, tilt: 45.0 }
-  output_dir: "./output"
-  render_video: true  # set false to keep only frames
+  output_dir: ./output
+  render_video: true
   video_fps: 25
 ```
 
-## Camera Wrapper
+Notes:
+- Video render needs `ffmpeg`. Set `render_video: false` to skip.
 
-The `CameraWrapper` provides a thin layer over gphoto2 to apply settings and capture images. It is used internally by other commands and can also be accessed directly from the CLI.
+## Layout
 
-### CLI
-Capture a single snapshot using the `camera` section from the config file.
-```sh
-$ cameracommander snapshot settings.yaml output.jpg
-```
-
-## Tripod Controller
-
-The `TripodController` communicates with a serial‑controlled pan/tilt head and is able to move it to absolute angles.
-
-### CLI
-Interactively move the tripod using the `tripod` section from the config file.
-```sh
-$ cameracommander tripod settings.yaml
-```
-
-## Gradio Config Creation UI
-
-CameraCommander includes a Gradio‑based web interface that helps build configuration files. Launch it locally or share it publicly.
-
-```sh
-$ cameracommander ui [--share]
-```
-
-![Gradio UI placeholder](docs/config_gen_small.gif)
-
-## Commands
-
-The CLI provides several commands to interact with the camera and tripod. Below are some examples of how to use these commands.
-
-### Snapshot
-Create a snapshot using the `camera` settings in the given config file.
-```sh
-$ cameracommander snapshot settings.yaml output.jpg
-```
-
-### Tripod
-Interactively move the tripod using the `tripod` settings in the config file.
-```sh
-$ cameracommander tripod settings.yaml
-```
-
-### Timelapse
-Run a timelapse session using `camera`, `tripod` and `timelapse` sections from the config.
-```sh
-$ cameracommander timelapse settings.yaml
-```
-
-### UI
-Launch the Gradio configuration builder.
-```sh
-$ cameracommander ui [--share]
-```
-
-## How to install
-### From Source, in a venv
-This project uses uv as a package manager. So install it first -> https://docs.astral.sh/uv/getting-started/installation/)
-
-#### Prerequirements
-```
-apt install gphoto2-dev
-```
-
-Then:
-```sh
-$ git clone https://github.com/fwarmuth/CameraCommander.git
-$ cd CameraCommander
-$ uv run cameracommander --help
-```
-
-### From PyPi
-```sh
-$ pip install cameracommander
-$ cameracommander --help
-```
+- `src/cli.py` — Typer CLI (lazy‑loads heavy modules)
+- `src/camerawrapper.py` — gphoto2 wrapper (settings, capture, live view)
+- `src/tripodwrapper.py` — serial tripod control (absolute moves)
+- `src/timelapse.py` — capture/move loop, metadata, ffmpeg render
+- `src/advanced_live_view/` — Gradio UI and helpers
 
