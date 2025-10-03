@@ -1,0 +1,21 @@
+﻿camera:
+  main.imgsettings.iso: 100
+  main.capturesettings.aperture: 2.8
+  main.capturesettings.shutterspeed: "1/60"
+  main.imgsettings.whitebalance: Auto
+
+tripod:
+  serial:
+    port: socket://127.0.0.1:9999
+    baudrate: 9600
+    timeout: 1.0
+    write_timeout: 1.0
+    reconnect_interval: 1.0
+    max_retries: 5
+  microstep: 1
+
+mock_firmware:
+  host: 127.0.0.1
+  port: 9999
+  deg_per_second: 60
+  settle_delay: 0.25

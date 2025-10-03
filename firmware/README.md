@@ -30,3 +30,18 @@ d / e                        # disable / enable drivers (resets position to 0)
 - `src/main.cpp` — command parser, pin map, motion control
 - Pin mapping and mechanics are defined in `src/main.cpp`.
 
+## Mock firmware server
+
+A pure-Python emulator lives in `firmware/mock_firmware_server.py`. It speaks the same
+serial protocol as the ESP firmware so you can exercise the desktop app without
+hardware attached.
+
+Start it in a shell:
+
+```
+python -m firmware.mock_firmware_server --host 127.0.0.1 --port 9999 --deg-per-second 60
+```
+
+Then point the tripod configuration at `socket://127.0.0.1:9999`. Adjust
+`--deg-per-second` (movement speed) and `--settle-delay` if you want slower or faster
+responses. Stop the mock with `Ctrl+C`.
