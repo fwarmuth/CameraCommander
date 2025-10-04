@@ -46,6 +46,7 @@ Just camera controls, north of Kiruna, Sweden.
 ## Structure
 
 - `app/` — Python CLI and Gradio UI
+- `gradio_app/` — Gradio-first UI package ([overview](gradio_app/README.md))
 - `firmware/` — ESP8266 PlatformIO source (`src/`)
 - `platformio.ini` — Firmware config (points `src_dir` to `firmware/src`)
 
