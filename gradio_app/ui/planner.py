@@ -264,6 +264,8 @@ async def _clone_preset(app_state_value: Any, request: Optional[Any]) -> Tuple[A
         return (*_empty_preset_payload(status),)
 
     settings = stored.settings
+    with AppState.use(app_state):
+        app_state.set_tripod_settings(settings.tripod)
     plan = settings.plan
     serial = settings.tripod.serial
 
@@ -408,6 +410,8 @@ async def _schedule_timelapse(
                 gr.Textbox.update(),
                 gr.Markdown.update(value=_summarise_plan(settings.plan)),
             )
+
+        app_state.set_tripod_settings(settings.tripod)
 
         job_id = uuid.uuid4().hex
         settings = settings.copy(update={"session_id": job_id})

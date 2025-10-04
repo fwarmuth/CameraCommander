@@ -9,6 +9,7 @@ from typing import Dict, Iterable, List, Tuple
 import gradio as gr
 
 from ..state import AppState
+from ..services import TripodAdapterError
 from .utils import (
     format_hardware_error,
     hardware_access_blocked_message,
@@ -30,6 +31,9 @@ _TRIPOD_JOG_PRESETS: List[Tuple[str, float, float]] = [
     ("Tilt Up", 0.0, 1.5),
     ("Tilt Down", 0.0, -1.5),
 ]
+_TRIPOD_CONFIG_PROMPT = (
+    "Tripod controls are unavailable until defaults are configured in the Timelapse Planner tab."
+)
 _CAMERA_SETTING_FIELDS: List[Tuple[str, str]] = [
     ("main.capturesettings.iso", "ISO"),
     ("main.capturesettings.f-number", "Aperture"),
@@ -313,7 +317,7 @@ async def _jog_tripod(
         try:
             await app_state.resources.move_tripod(pan_deg=pan, tilt_deg=tilt)
         except Exception as exc:  # pragma: no cover - relies on hardware
-            return format_hardware_error("Tripod jog failed", exc)
+            return _handle_tripod_exception("Tripod jog failed", exc)
 
     return f"Tripod jogged Δpan={pan:+.1f}°, Δtilt={tilt:+.1f}°."
 
@@ -327,9 +331,18 @@ async def _stop_tripod(app_state_value: AppState) -> str:
         try:
             await app_state.resources.stop_tripod()
         except Exception as exc:  # pragma: no cover - relies on hardware
-            return format_hardware_error("Tripod stop failed", exc)
+            return _handle_tripod_exception("Tripod stop failed", exc)
 
     return "Tripod stop command sent."
+
+
+def _handle_tripod_exception(context: str, exc: BaseException) -> str:
+    if isinstance(exc, TripodAdapterError) and getattr(exc, "code", "") in {
+        "tripod_not_configured",
+        "tripod_config_invalid",
+    }:
+        return _TRIPOD_CONFIG_PROMPT
+    return format_hardware_error(context, exc)
 
 
 async def _observe_hardware_lock(app_state_value: AppState):
