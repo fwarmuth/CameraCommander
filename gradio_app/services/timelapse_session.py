@@ -1,10 +1,11 @@
 """Async-aware timelapse session controller for the Gradio service layer.
 
-This module mirrors :mod:`app.src.timelapse` but replaces blocking waits with
-cooperative cancellation checks so it can be orchestrated from asyncio-based
-code. The heavy lifting still happens on a worker thread – this module merely
-exposes callbacks that allow the :class:`~gradio_app.services.timelapse_runner.TimelapseJobRunner`
-to surface progress and lifecycle events back to the UI.
+This module mirrors the legacy timelapse implementation but replaces blocking
+waits with cooperative cancellation checks so it can be orchestrated from
+asyncio-based code. The heavy lifting still happens on a worker thread – this
+module merely exposes callbacks that allow the
+:class:`~gradio_app.services.timelapse_runner.TimelapseJobRunner` to surface
+progress and lifecycle events back to the UI.
 """
 
 from __future__ import annotations
@@ -37,8 +38,8 @@ except ModuleNotFoundError:  # pragma: no cover - defensive
 
 from tqdm import tqdm
 
-from app.src.camerawrapper import CameraError, CameraWrapper
-from app.src.tripodwrapper import TripodController
+from .camera_adapter import CameraAdapter, CameraAdapterError
+from .tripod_adapter import TripodAdapter, TripodAdapterError
 
 __all__ = ["TimelapseSession", "TimelapseError"]
 
@@ -63,8 +64,8 @@ class TimelapseSession:
         self._cfg = self._load_config(config)
         self._validate_config(self._cfg)
 
-        self.camera: Optional[CameraWrapper] = None
-        self.tripod: Optional[TripodController] = None
+        self.camera: Optional[CameraAdapter] = None
+        self.tripod: Optional[TripodAdapter] = None
 
         self._metadata_csv: Optional[csv.DictWriter] = None
         self._metadata_file_handle: Optional[Any] = None
@@ -87,7 +88,7 @@ class TimelapseSession:
         logger.info("Preparing timelapse session")
 
         self.camera = self._init_camera(self._cfg["camera"])
-        self.tripod = TripodController(self._cfg["tripod"])
+        self.tripod = self._init_tripod(self._cfg["tripod"])
         self._home_and_goto_start()
 
         f_total = self._tl.total_frames
@@ -206,7 +207,7 @@ class TimelapseSession:
 
         try:
             img_path = self.camera.capture_image_no_af(dest=path)
-        except CameraError as exc:
+        except CameraAdapterError as exc:
             raise TimelapseError(f"Camera capture failed: {exc}") from exc
 
         pan, tilt = self.tripod.position if self.tripod else (None, None)
@@ -284,26 +285,35 @@ class TimelapseSession:
         logger.info("Video written to %s", self.video_path)
         return self.video_path
 
-    def _init_camera(self, cam_cfg: Dict[str, Any]) -> CameraWrapper:
-        """Initialise CameraWrapper and apply settings from *cam_cfg*."""
+    def _init_camera(self, cam_cfg: Dict[str, Any]) -> CameraAdapter:
+        """Initialise :class:`CameraAdapter` and apply settings from *cam_cfg*."""
 
         cam_cfg = cam_cfg.copy()
         model_sub = cam_cfg.pop("model_substring", None)
-        if model_sub is not None:
-            camera = CameraWrapper.select_camera(model_sub)
-        else:
-            discovered = CameraWrapper.discover_cameras()
-            if not discovered:
-                raise TimelapseError("No USB camera detected")
-            model, port = discovered[0].rsplit(" (", 1)
-            port = port.rstrip(")")
-            camera = CameraWrapper(model, port)
+        try:
+            if model_sub is not None:
+                camera = CameraAdapter.select_camera(model_sub)
+            else:
+                camera = CameraAdapter.autodetect()
+        except CameraAdapterError as exc:
+            raise TimelapseError(f"Camera initialisation failed: {exc}") from exc
 
         if cam_cfg:
             logger.info("Applying %s camera settings", len(cam_cfg))
-            camera.apply_settings(cam_cfg)
+            try:
+                camera.apply_settings(cam_cfg)
+            except CameraAdapterError as exc:
+                raise TimelapseError(f"Camera configuration failed: {exc}") from exc
 
         return camera
+
+    def _init_tripod(self, tripod_cfg: Dict[str, Any]) -> TripodAdapter:
+        """Initialise :class:`TripodAdapter` from configuration."""
+
+        try:
+            return TripodAdapter(tripod_cfg)
+        except TripodAdapterError as exc:
+            raise TimelapseError(f"Tripod initialisation failed: {exc}") from exc
 
     def _home_and_goto_start(self) -> None:
         """Bring tripod to a known start position defined in config."""
@@ -401,7 +411,7 @@ class TimelapseSession:
             logger.warning("Tripod cleanup failed: %s", exc)
         try:
             if self.camera:
-                self.camera.__exit__(None, None, None)
+                self.camera.close()
         except Exception as exc:  # pragma: no cover - defensive guard
             logger.warning("Camera cleanup failed: %s", exc)
         self._close_metadata_sink()

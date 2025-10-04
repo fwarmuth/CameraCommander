@@ -1,7 +1,7 @@
 """Camera interaction helpers tailored for the Gradio application layer.
 
-The adapter mirrors the legacy :mod:`app.src.camerawrapper` behaviour but trims
-CLI oriented helpers so it can be reused safely from async Gradio callbacks.
+The adapter mirrors the legacy camera wrapper behaviour but trims CLI oriented
+helpers so it can be reused safely from async Gradio callbacks.
 """
 
 from __future__ import annotations
@@ -477,6 +477,69 @@ class CameraAdapter:
                     self._context,
                 )
             )
+            return output_path
+
+        return self._with_reconnect(_inner)
+
+    def capture_image_no_af(self, dest: Optional[Path] = None, *, timeout_ms: int = 5_000) -> Path:
+        """Capture a still without driving the autofocus motor."""
+
+        if timeout_ms <= 0:
+            raise CameraAdapterError("timeout_ms must be positive.", code="invalid_arguments")
+
+        eos_remote_release = "main.actions.eosremoterelease"
+
+        def _inner() -> Path:
+            if self._camera is None:
+                raise CameraAdapterError("Camera connection is closed.", code="camera_not_ready")
+
+            # Trigger shutter without autofocus -------------------------------------------------
+            self.apply_settings({eos_remote_release: "Immediate"})
+
+            # Wait until the camera confirms which file was produced ----------------------------
+            event_type, event_data = gp.check_result(
+                gp.gp_camera_wait_for_event(self._camera, timeout_ms, self._context)
+            )
+            while event_type != gp.GP_EVENT_FILE_ADDED:
+                event_type, event_data = gp.check_result(
+                    gp.gp_camera_wait_for_event(self._camera, timeout_ms, self._context)
+                )
+
+            file_path = event_data
+
+            camera_file = gp.check_result(
+                gp.gp_camera_file_get(
+                    self._camera,
+                    file_path.folder,
+                    file_path.name,
+                    gp.GP_FILE_TYPE_NORMAL,
+                )
+            )
+            data = gp.check_result(gp.gp_file_get_data_and_size(camera_file))
+
+            if dest and dest.suffix:
+                output_path = dest
+            else:
+                output_dir = dest or Path(tempfile.gettempdir())
+                timestamp = int(time.time())
+                extension = Path(file_path.name).suffix
+                output_path = output_dir / f"capture_{timestamp}{extension}"
+
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(data)
+
+            gp.check_result(
+                gp.gp_camera_file_delete(
+                    self._camera,
+                    file_path.folder,
+                    file_path.name,
+                    self._context,
+                )
+            )
+
+            # Reset shutter button state -------------------------------------------------------
+            self.apply_settings({eos_remote_release: "Release Full"})
+
             return output_path
 
         return self._with_reconnect(_inner)

@@ -19,9 +19,9 @@ from pydantic import BaseModel, Field, root_validator, validator
 
 
 class CameraSettings(BaseModel):
-    """Camera configuration forwarded to :class:`CameraWrapper`."""
+    """Camera configuration forwarded to :class:`~gradio_app.services.camera_adapter.CameraAdapter`."""
 
-    # ``overrides`` mirrors ``CameraWrapper.apply_settings`` keyword arguments so
+    # ``overrides`` mirrors ``CameraAdapter.apply_settings`` keyword arguments so
     # the Gradio planner can safely persist advanced options without depending on
     # the concrete camera implementation.
     model_substring: Optional[str] = Field(
@@ -33,7 +33,7 @@ class CameraSettings(BaseModel):
     )
     overrides: Dict[str, Any] = Field(
         default_factory=dict,
-        description="Additional CameraWrapper.apply_settings overrides keyed by property name.",
+        description="Additional CameraAdapter.apply_settings overrides keyed by property name.",
     )
 
     @classmethod
@@ -61,7 +61,7 @@ class TripodSerialSettings(BaseModel):
 
 
 class TripodSettings(BaseModel):
-    """Tripod controller configuration forwarded to :class:`TripodController`."""
+    """Tripod controller configuration forwarded to :class:`~gradio_app.services.tripod_adapter.TripodAdapter`."""
 
     # Serial/microstep fields are surfaced individually for validation whereas
     # ``options`` carries any controller-specific key/value pairs that the UI
@@ -93,7 +93,7 @@ class TripodSettings(BaseModel):
         )
 
     def to_session_config(self) -> Dict[str, Any]:
-        """Render the configuration mapping expected by ``TripodController``."""
+        """Render the configuration mapping expected by ``TripodAdapter``."""
 
         cfg: Dict[str, Any] = dict(self.options)
         if self.serial:
