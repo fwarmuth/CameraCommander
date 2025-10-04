@@ -11,7 +11,7 @@ from collections import defaultdict
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import AsyncIterator, Dict, Iterable, Iterator, Set
+from typing import AsyncIterator, Callable, Dict, Iterable, Iterator, Optional, Set
 
 from .services import AsyncResourceManager, TimelapseJobRunner
 from .services.timelapse_runner import TimelapseJob, TimelapseJobStatus
@@ -19,6 +19,7 @@ from .store.session_repository import SessionRepository
 
 _APP_STATE: ContextVar["AppState"] = ContextVar("app_state")
 _JOB_STREAM_SENTINEL = object()
+_SESSION_STREAM_SENTINEL = object()
 
 
 @dataclass
@@ -30,6 +31,8 @@ class AppState:
     jobs: TimelapseJobRunner = field(default_factory=TimelapseJobRunner)
     sessions: SessionRepository = field(default_factory=SessionRepository)
 
+    library_selected_session: Optional[str] = field(default=None, init=False)
+
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False)
     _shutdown_event: asyncio.Event = field(default_factory=asyncio.Event, init=False)
     _job_listeners: Dict[str, Set[asyncio.Queue[TimelapseJob | object]]] = field(
@@ -39,6 +42,24 @@ class AppState:
     _hardware_lock_listeners: Set[asyncio.Queue[bool | object]] = field(
         default_factory=set, init=False
     )
+    _session_listeners: Set[asyncio.Queue[int | object]] = field(
+        default_factory=set, init=False
+    )
+    _session_version: int = field(default=0, init=False)
+    _session_repo_listener: Optional[Callable[[], None]] = field(
+        default=None, init=False, repr=False
+    )
+    _loop: Optional[asyncio.AbstractEventLoop] = field(default=None, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        try:
+            self._loop = asyncio.get_running_loop()
+        except RuntimeError:  # pragma: no cover - fallback for non-running loop
+            self._loop = asyncio.get_event_loop()
+
+        listener = self._on_session_repository_changed
+        self.sessions.add_change_listener(listener)
+        self._session_repo_listener = listener
 
     # ------------------------------------------------------------------
     # Dependency injection helpers
@@ -129,6 +150,25 @@ class AppState:
             async with self._lock:
                 self._hardware_lock_listeners.discard(queue)
 
+    async def subscribe_sessions(self) -> AsyncIterator[int]:
+        """Yield version counters whenever the session repository changes."""
+
+        queue: asyncio.Queue[int | object] = asyncio.Queue()
+
+        async with self._lock:
+            self._session_listeners.add(queue)
+
+        try:
+            while True:
+                update = await queue.get()
+                if update is _SESSION_STREAM_SENTINEL:
+                    break
+                if isinstance(update, int):
+                    yield update
+        finally:
+            async with self._lock:
+                self._session_listeners.discard(queue)
+
     async def _dispatch_job_update(self, job: TimelapseJob) -> None:
         async with self._lock:
             listeners: Iterable[asyncio.Queue[TimelapseJob | object]] = tuple(
@@ -165,6 +205,21 @@ class AppState:
 
         for queue in listeners:
             queue.put_nowait(locked)
+
+    def _on_session_repository_changed(self) -> None:
+        loop = self._loop
+        if loop is None or loop.is_closed():  # pragma: no cover - defensive guard
+            return
+        loop.call_soon_threadsafe(self._notify_session_change)
+
+    def _notify_session_change(self) -> None:
+        self._session_version += 1
+
+        listeners: Iterable[asyncio.Queue[int | object]]
+        listeners = tuple(self._session_listeners)
+
+        for queue in listeners:
+            queue.put_nowait(self._session_version)
 
     async def _remove_job_listener(
         self, job_id: str, queue: asyncio.Queue[TimelapseJob | object]
@@ -212,6 +267,10 @@ class AppState:
 
         self._shutdown_event.set()
 
+        if self._session_repo_listener is not None:
+            self.sessions.remove_change_listener(self._session_repo_listener)
+            self._session_repo_listener = None
+
         # Cancel any observer tasks that may still be running.
         for task in list(self._background_tasks):
             task.cancel()
@@ -229,12 +288,17 @@ class AppState:
             self._job_listeners.clear()
             lock_listeners = tuple(self._hardware_lock_listeners)
             self._hardware_lock_listeners.clear()
+            session_listeners = tuple(self._session_listeners)
+            self._session_listeners.clear()
 
         for queue in listeners:
             queue.put_nowait(_JOB_STREAM_SENTINEL)
 
         for queue in lock_listeners:
             queue.put_nowait(_JOB_STREAM_SENTINEL)
+
+        for queue in session_listeners:
+            queue.put_nowait(_SESSION_STREAM_SENTINEL)
 
         await self.jobs.shutdown()
         await self.resources.shutdown()

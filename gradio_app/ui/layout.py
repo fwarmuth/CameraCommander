@@ -17,14 +17,15 @@ def build_application(app_state: AppState) -> gr.Blocks:
     with gr.Blocks(title="CameraCommander") as demo:
         shared_state = gr.State(app_state)
         active_job_state = gr.State(value=None)
+        planner_clone_state = gr.State(value=None)
 
         gr.Markdown("# CameraCommander Gradio Application (Work in Progress)")
         with gr.TabbedInterface(
             [
                 live_control.render_tab(shared_state),
-                planner.render_tab(shared_state, active_job_state),
+                planner.render_tab(shared_state, active_job_state, planner_clone_state),
                 session_monitor.render_tab(shared_state, active_job_state),
-                library.render_tab(shared_state),
+                library.render_tab(shared_state, planner_clone_state),
             ],
             [
                 "Live Control",

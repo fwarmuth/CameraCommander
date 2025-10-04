@@ -9,7 +9,7 @@ import shutil
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Optional, Sequence
+from typing import Callable, Iterable, Optional, Sequence, Set
 
 from pydantic import ValidationError
 
@@ -48,6 +48,7 @@ class SessionRepository:
     def __init__(self, base_path: Path = DEFAULT_REPOSITORY_ROOT) -> None:
         self._base_path = base_path
         self._base_path.mkdir(parents=True, exist_ok=True)
+        self._change_listeners: Set[Callable[[], None]] = set()
 
     # ------------------------------------------------------------------
     # Public API
@@ -175,12 +176,16 @@ class SessionRepository:
             settings_path = destination_root / self.SETTINGS_FILENAME
             settings_path.write_text(stored_settings.json(indent=2), encoding="utf-8")
 
-        return StoredSession(
+        stored_session = StoredSession(
             summary=summary_absolute,
             base_path=destination_root,
             settings=stored_settings,
             assets=tuple(absolute_assets),
         )
+
+        self._notify_changed()
+
+        return stored_session
 
     def list_sessions(self) -> Iterable[StoredSession]:
         """Return all known sessions sorted by ``created_at`` descending."""
@@ -218,6 +223,8 @@ class SessionRepository:
             return
         except OSError as exc:
             raise RuntimeError(f"Failed to delete session '{session_id}': {exc}") from exc
+
+        self._notify_changed()
 
     def ingest_completed_session(
         self,
@@ -322,6 +329,24 @@ class SessionRepository:
         )
 
         return self.register_session(stored)
+
+    def add_change_listener(self, listener: Callable[[], None]) -> None:
+        """Register *listener* to be notified when sessions mutate."""
+
+        self._change_listeners.add(listener)
+
+    def remove_change_listener(self, listener: Callable[[], None]) -> None:
+        """Remove a previously registered session change *listener*."""
+
+        self._change_listeners.discard(listener)
+
+    def _notify_changed(self) -> None:
+        listeners = tuple(self._change_listeners)
+        for listener in listeners:
+            try:
+                listener()
+            except Exception:  # pragma: no cover - defensive guard
+                logger.exception("Session change listener failed")
 
     # ------------------------------------------------------------------
     # Helpers
