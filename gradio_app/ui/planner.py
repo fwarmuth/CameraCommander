@@ -23,11 +23,17 @@ from ..state import AppState
 from .utils import hardware_access_blocked_message, unwrap_app_state
 
 
-def render_tab(shared_app_state: gr.State, active_job_state: Optional[gr.State] = None) -> gr.Blocks:
+def render_tab(
+    shared_app_state: gr.State,
+    active_job_state: Optional[gr.State] = None,
+    clone_request_state: Optional[gr.State] = None,
+) -> gr.Blocks:
     """Render the Timelapse Planner tab contents."""
 
     if active_job_state is None:
         active_job_state = gr.State(value=None)
+    if clone_request_state is None:
+        clone_request_state = gr.State(value=None)
 
     with gr.Blocks() as tab:
         gr.Markdown("## Timelapse Planner")
@@ -169,6 +175,12 @@ def render_tab(shared_app_state: gr.State, active_job_state: Optional[gr.State] 
             outputs=preset_outputs,
         )
 
+        clone_request_state.change(
+            _clone_preset,
+            inputs=[shared_app_state, clone_request_state],
+            outputs=preset_outputs,
+        )
+
         # Inter-field behaviour ---------------------------------------------
         render_video.change(
             _toggle_video_options,
@@ -234,8 +246,10 @@ async def _load_preset_choices(app_state_value: Any) -> gr.Dropdown.update:
     return gr.Dropdown.update(choices=choices, value=None)
 
 
-async def _clone_preset(app_state_value: Any, session_id: Optional[str]) -> Tuple[Any, ...]:
+async def _clone_preset(app_state_value: Any, request: Optional[Any]) -> Tuple[Any, ...]:
     status: str
+
+    session_id = _resolve_session_id(request)
 
     if not session_id:
         status = "Select a preset session to clone settings."
@@ -290,6 +304,16 @@ def _empty_preset_payload(status: str) -> List[Any]:
     empty_values.append("")  # plan_summary
     empty_values.append(status)
     return empty_values
+
+
+def _resolve_session_id(request: Optional[Any]) -> Optional[str]:
+    if isinstance(request, str):
+        return request or None
+    if isinstance(request, dict):
+        candidate = request.get("session_id")
+        if isinstance(candidate, str) and candidate:
+            return candidate
+    return None
 
 
 async def _observe_hardware_lock(app_state_value: Any) -> AsyncIterator[Tuple[gr.Update, gr.Update]]:
