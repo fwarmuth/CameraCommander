@@ -8,8 +8,14 @@ from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Optional
 
 from .camera_adapter import CameraAdapter, CameraAdapterError
 from .tripod_adapter import TripodAdapter, TripodAdapterError
+from ..models import TripodSettings
 
-__all__ = ["AsyncResourceManager", "ResourceHandles", "ServiceError"]
+__all__ = [
+    "AsyncResourceManager",
+    "ResourceHandles",
+    "ServiceError",
+    "tripod_adapter_from_settings",
+]
 
 
 class ServiceError(RuntimeError):
@@ -56,8 +62,11 @@ class AsyncResourceManager:
         # Drop cached instance so next access rebuilds it with new factory.
         self._handles.camera = None
 
-    def configure_tripod(self, factory: Callable[[], TripodAdapter]) -> None:
-        """Override the tripod factory used during lazy initialisation."""
+    def configure_tripod(self, factory: Optional[Callable[[], TripodAdapter]]) -> None:
+        """Override the tripod factory used during lazy initialisation.
+
+        Passing ``None`` disables tripod access until a new factory is provided.
+        """
 
         self._tripod_factory = factory
         self._handles.tripod = None
@@ -199,3 +208,16 @@ class AsyncResourceManager:
                 code="tripod_operation_error",
                 details={"operation": method},
             ) from exc
+
+
+def tripod_adapter_from_settings(settings: TripodSettings) -> TripodAdapter:
+    """Build a :class:`TripodAdapter` from validated tripod settings."""
+
+    config = settings.to_session_config()
+    serial_cfg = config.get("serial")
+    if not isinstance(serial_cfg, dict) or not serial_cfg.get("port"):
+        raise TripodAdapterError(
+            "Tripod configuration is missing serial connection details.",
+            code="tripod_not_configured",
+        )
+    return TripodAdapter(config)

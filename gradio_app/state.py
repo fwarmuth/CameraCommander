@@ -13,7 +13,9 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import AsyncIterator, Callable, Dict, Iterable, Iterator, Optional, Set
 
-from .services import AsyncResourceManager, TimelapseJobRunner
+from .models import TripodSettings
+from .services import AsyncResourceManager, TimelapseJobRunner, TripodAdapter
+from .services.resources import tripod_adapter_from_settings
 from .services.timelapse_runner import TimelapseJob, TimelapseJobStatus
 from .store.session_repository import SessionRepository
 
@@ -30,6 +32,7 @@ class AppState:
     resources: AsyncResourceManager = field(default_factory=AsyncResourceManager)
     jobs: TimelapseJobRunner = field(default_factory=TimelapseJobRunner)
     sessions: SessionRepository = field(default_factory=SessionRepository)
+    tripod_settings: Optional[TripodSettings] = field(default=None)
 
     library_selected_session: Optional[str] = field(default=None, init=False)
 
@@ -60,6 +63,9 @@ class AppState:
         listener = self._on_session_repository_changed
         self.sessions.add_change_listener(listener)
         self._session_repo_listener = listener
+
+        if self.tripod_settings is not None:
+            self.set_tripod_settings(self.tripod_settings)
 
     # ------------------------------------------------------------------
     # Dependency injection helpers
@@ -302,6 +308,30 @@ class AppState:
 
         await self.jobs.shutdown()
         await self.resources.shutdown()
+
+    # ------------------------------------------------------------------
+    # Tripod configuration helpers
+    # ------------------------------------------------------------------
+    def set_tripod_settings(self, settings: Optional[TripodSettings]) -> None:
+        """Persist tripod defaults and refresh the shared tripod factory."""
+
+        if settings is None:
+            self.tripod_settings = None
+            self.resources.configure_tripod(None)
+            return
+
+        snapshot = settings.copy(deep=True)
+        self.tripod_settings = snapshot
+
+        serial = snapshot.serial
+        if serial is None or not getattr(serial, "port", None):
+            self.resources.configure_tripod(None)
+            return
+
+        def _factory() -> TripodAdapter:
+            return tripod_adapter_from_settings(snapshot)
+
+        self.resources.configure_tripod(_factory)
 
 
 def get_app_state() -> AppState:
