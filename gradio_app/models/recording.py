@@ -15,7 +15,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional
 
-from pydantic import BaseModel, Field, root_validator, validator
+from pydantic import BaseModel, Field, model_validator, root_validator, validator
 
 
 class CameraSettings(BaseModel):
@@ -139,7 +139,7 @@ class TimelapsePlan(BaseModel):
         None, description="Additional command-line flags passed to ffmpeg during rendering."
     )
 
-    @root_validator
+    @model_validator(mode="before")
     def _validate_video_requirements(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         render_video = values.get("render_video", True)
         if render_video and values.get("video_fps") is None:

@@ -75,11 +75,9 @@ Notes:
 The controller logic is identical to talking to the ESP; swap the `serial.port` back to your COM/USB device when you connect real hardware.
 ## Layout
 
-- `src/cli.py` â€” Typer CLI (lazyâ€‘loads heavy modules)
-- `src/camerawrapper.py` â€” gphoto2 wrapper (settings, capture, live view)
-- `src/tripodwrapper.py` â€” serial tripod control (absolute moves)
-- `src/timelapse.py` â€” capture/move loop, metadata, ffmpeg render
-- `src/advanced_live_view/` â€” Gradio UI and helpers
-
-
+- `src/cli.py` — Typer CLI (lazy‑loads heavy modules)
+- `src/camerawrapper.py` — gphoto2 wrapper (settings, capture, live view)
+- `src/tripodwrapper.py` — serial tripod control (absolute moves)
+- `src/timelapse.py` — capture/move loop, metadata, ffmpeg render
+- `src/advanced_live_view/` — Gradio UI and helpers
 
