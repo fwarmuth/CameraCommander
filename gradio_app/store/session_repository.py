@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Iterable, Optional
+from typing import Iterable, Optional, Sequence
+
+from ..models import RecordingAsset, RecordingSettings, RecordingSummary
 
 
 DEFAULT_REPOSITORY_ROOT = Path.home() / ".cameracommander" / "recordings"
@@ -14,9 +16,16 @@ DEFAULT_REPOSITORY_ROOT = Path.home() / ".cameracommander" / "recordings"
 class StoredSession:
     """Represents a stored timelapse session on disk."""
 
-    session_id: str
-    metadata: Dict[str, object]
+    summary: RecordingSummary
     base_path: Path
+    settings: Optional[RecordingSettings] = None
+    assets: Sequence[RecordingAsset] = field(default_factory=tuple)
+
+    @property
+    def session_id(self) -> str:
+        """Expose the session identifier for convenience."""
+
+        return self.summary.session_id
 
 
 class SessionRepository:
