@@ -4,23 +4,26 @@ from __future__ import annotations
 
 import gradio as gr
 
+from ..state import AppState
 from . import library, live_control, planner, session_monitor
 
 
-def build_application() -> gr.Blocks:
+def build_application(app_state: AppState) -> gr.Blocks:
     """Construct the top-level Gradio Blocks application.
 
     This placeholder sets up the tab structure without wiring any functionality.
     """
 
     with gr.Blocks(title="CameraCommander") as demo:
+        shared_state = gr.State(app_state)
+
         gr.Markdown("# CameraCommander Gradio Application (Work in Progress)")
         with gr.TabbedInterface(
             [
-                live_control.render_tab(),
-                planner.render_tab(),
-                session_monitor.render_tab(),
-                library.render_tab(),
+                live_control.render_tab(shared_state),
+                planner.render_tab(shared_state),
+                session_monitor.render_tab(shared_state),
+                library.render_tab(shared_state),
             ],
             [
                 "Live Control",

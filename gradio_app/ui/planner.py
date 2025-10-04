@@ -5,7 +5,7 @@ from __future__ import annotations
 import gradio as gr
 
 
-def render_tab() -> gr.Blocks:
+def render_tab(_app_state: gr.State) -> gr.Blocks:
     """Render the Timelapse Planner tab contents."""
 
     with gr.Blocks() as tab:

@@ -4,13 +4,31 @@ from __future__ import annotations
 
 import asyncio
 
+from .state import AppState
+from . import ui
+
+_SERVER_NAME = "0.0.0.0"
+_SERVER_PORT = 7860
+
 
 async def _async_main() -> None:
-    """Placeholder async entry point for the upcoming Gradio application."""
-    # NOTE: This placeholder will be replaced with the real app bootstrap logic.
-    raise NotImplementedError(
-        "Gradio application bootstrap has not been implemented yet."
-    )
+    """Bootstrap and launch the Gradio application."""
+
+    app_state = AppState()
+    app = ui.build_application(app_state)
+
+    # Enable background processing and block until the server stops.
+    app.queue()
+
+    try:
+        await asyncio.to_thread(
+            app.launch,
+            server_name=_SERVER_NAME,
+            server_port=_SERVER_PORT,
+            show_api=False,
+        )
+    finally:
+        await app_state.shutdown()
 
 
 def main() -> None:
