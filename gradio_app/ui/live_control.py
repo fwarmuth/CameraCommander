@@ -107,7 +107,13 @@ def render_tab(shared_app_state: gr.State) -> gr.Blocks:
             _refresh_live_view,
             inputs=[shared_app_state, live_view_active],
             outputs=[live_view, live_view_active, status_message],
-            every=_LIVE_VIEW_INTERVAL_SECONDS,
+        )
+
+        live_view_timer = gr.Timer(value=_LIVE_VIEW_INTERVAL_SECONDS)
+        live_view_timer.tick(
+            _refresh_live_view,
+            inputs=[shared_app_state, live_view_active],
+            outputs=[live_view, live_view_active, status_message],
         )
 
         # Focus controls -----------------------------------------------------
@@ -158,7 +164,6 @@ def render_tab(shared_app_state: gr.State) -> gr.Blocks:
                 stop_tripod,
                 lock_banner,
             ],
-            stream=True,
         )
 
     return tab

@@ -56,7 +56,6 @@ def render_tab(shared_app_state: gr.State, active_job_state: Optional[gr.State] 
                 cancel_button,
                 job_start_state,
             ],
-            stream=True,
         )
 
     return tab
@@ -66,7 +65,7 @@ async def _monitor_active_job(
     app_state_value: Any,
     job_id: Optional[str],
     started_at: Optional[str],
-) -> AsyncIterator[Tuple[Optional[str], gr.Update, gr.Update, gr.Update, gr.Update, gr.Update, gr.Update, Optional[str]]]:
+) -> AsyncIterator[Tuple[Optional[str], Any, Any, Any, Any, Any, Any, Optional[str]]]:
     app_state = unwrap_app_state(app_state_value)
 
     if not job_id:
@@ -94,7 +93,7 @@ async def _monitor_active_job(
     yield _idle_payload(final_message)
 
 
-async def _cancel_job(app_state_value: Any, job_id: Optional[str]) -> gr.Markdown.update:
+async def _cancel_job(app_state_value: Any, job_id: Optional[str]) -> Any:
     if not job_id:
         return gr.Markdown.update(value="No active job to cancel.")
 
@@ -108,7 +107,7 @@ async def _cancel_job(app_state_value: Any, job_id: Optional[str]) -> gr.Markdow
 def _job_payload(
     job: TimelapseJob,
     start_dt: Optional[datetime],
-) -> Tuple[Optional[str], gr.Update, gr.Update, gr.Update, gr.Update, gr.Update, gr.Update, Optional[str]]:
+) -> Tuple[Optional[str], Any, Any, Any, Any, Any, Any, Optional[str]]:
     plan_summary = _plan_summary(job)
     heading = f"### Job `{job.job_id}` — {job.status.name.title()}"
     eta = _format_eta(job, start_dt)
@@ -129,7 +128,7 @@ def _job_payload(
     )
 
 
-def _idle_payload(message: str) -> Tuple[Optional[str], gr.Update, gr.Update, gr.Update, gr.Update, gr.Update, gr.Update, Optional[str]]:
+def _idle_payload(message: str) -> Tuple[Optional[str], Any, Any, Any, Any, Any, Any, Optional[str]]:
     return (
         None,
         gr.Markdown.update(value="### No active session"),

@@ -225,13 +225,12 @@ def render_tab(
             _observe_hardware_lock,
             inputs=[shared_app_state],
             outputs=[submit_button, lock_banner],
-            stream=True,
         )
 
     return tab
 
 
-async def _load_preset_choices(app_state_value: Any) -> gr.Dropdown.update:
+async def _load_preset_choices(app_state_value: Any) -> Any:
     app_state = unwrap_app_state(app_state_value)
     with AppState.use(app_state):
         sessions = await asyncio.to_thread(lambda: list(app_state.sessions.list_sessions()))
@@ -318,7 +317,7 @@ def _resolve_session_id(request: Optional[Any]) -> Optional[str]:
     return None
 
 
-async def _observe_hardware_lock(app_state_value: Any) -> AsyncIterator[Tuple[gr.Update, gr.Update]]:
+async def _observe_hardware_lock(app_state_value: Any) -> AsyncIterator[Tuple[Any, Any]]:
     app_state = unwrap_app_state(app_state_value)
     with AppState.use(app_state):
         async for locked in app_state.subscribe_hardware_lock():
@@ -358,7 +357,7 @@ async def _schedule_timelapse(
     tripod_options: Optional[str],
     tags: Optional[str],
     notes: Optional[str],
-) -> Tuple[gr.Update, Optional[str], gr.Update, gr.Update]:
+) -> Tuple[Any, Optional[str], Any, Any]:
     app_state = unwrap_app_state(app_state_value)
 
     try:
@@ -529,7 +528,7 @@ def _parse_tags(raw: Optional[str]) -> List[str]:
     return [item for item in parts if item]
 
 
-def _toggle_video_options(render_video: bool) -> gr.Number.update:
+def _toggle_video_options(render_video: bool) -> Any:
     return gr.Number.update(interactive=render_video)
 
 

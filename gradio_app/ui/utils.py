@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from ..services import CameraAdapterError, ServiceError, TripodAdapterError
-from ..state import AppState
+from ..state import AppState, AppStateHandle
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +24,10 @@ def unwrap_app_state(value: Any) -> AppState:
 
     if isinstance(value, AppState):
         return value
+    if isinstance(value, AppStateHandle):
+        return value.state
+    if value is None:
+        return AppState.current()
     raise RuntimeError("Expected AppState in shared state.")
 
 

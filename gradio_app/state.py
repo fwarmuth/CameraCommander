@@ -72,6 +72,12 @@ class AppState:
         if self.tripod_settings is not None:
             self.set_tripod_settings(self.tripod_settings)
 
+    def __deepcopy__(self, memo: Dict[int, object]) -> "AppState":
+        """Preserve identity when libraries attempt to clone the state."""
+
+        memo[id(self)] = self
+        return self
+
     # ------------------------------------------------------------------
     # Dependency injection helpers
     # ------------------------------------------------------------------
@@ -380,3 +386,16 @@ def get_app_state() -> AppState:
     """Convenience accessor mirroring :meth:`AppState.current`."""
 
     return AppState.current()
+
+
+class AppStateHandle:
+    """Lightweight wrapper for sharing AppState via UI state components."""
+
+    __slots__ = ("state",)
+
+    def __init__(self, state: AppState) -> None:
+        self.state = state
+
+    def __repr__(self) -> str:  # pragma: no cover - debug helper
+        return f"AppStateHandle({self.state!r})"
+

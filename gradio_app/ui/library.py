@@ -160,7 +160,6 @@ def render_tab(
                 archive_file,
                 status_message,
             ],
-            stream=True,
         )
 
     return tab
@@ -169,15 +168,15 @@ def render_tab(
 async def _initialise_library(
     app_state_value: Any, current_selection: Optional[str]
 ) -> Tuple[
-    gr.Dropdown.update,
-    gr.Markdown.update,
+    Any,
+    Any,
     Optional[str],
-    gr.Markdown.update,
-    gr.Markdown.update,
-    gr.Video.update,
-    gr.Gallery.update,
-    gr.File.update,
-    gr.Markdown.update,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
 ]:
     return await _refresh_library(app_state_value, current_selection)
 
@@ -188,15 +187,15 @@ async def _refresh_library(
     *,
     keep_status: bool = False,
 ) -> Tuple[
-    gr.Dropdown.update,
-    gr.Markdown.update,
+    Any,
+    Any,
     Optional[str],
-    gr.Markdown.update,
-    gr.Markdown.update,
-    gr.Video.update,
-    gr.Gallery.update,
-    gr.File.update,
-    gr.Markdown.update,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
 ]:
     app_state = unwrap_app_state(app_state_value)
 
@@ -244,12 +243,12 @@ async def _select_session(
     app_state_value: Any, session_id: Optional[str]
 ) -> Tuple[
     Optional[str],
-    gr.Markdown.update,
-    gr.Markdown.update,
-    gr.Video.update,
-    gr.Gallery.update,
-    gr.File.update,
-    gr.Markdown.update,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
 ]:
     app_state = unwrap_app_state(app_state_value)
     app_state.library_selected_session = session_id
@@ -274,7 +273,7 @@ async def _select_session(
 
 async def _prepare_archive(
     app_state_value: Any, session_id: Optional[str]
-) -> Tuple[gr.File.update, gr.Markdown.update]:
+) -> Tuple[Any, Any]:
     if not session_id:
         return (
             gr.File.update(value=None, visible=False),
@@ -302,7 +301,7 @@ async def _prepare_archive(
 
 async def _clone_to_planner(
     app_state_value: Any, session_id: Optional[str]
-) -> Tuple[Any, gr.Markdown.update]:
+) -> Tuple[Any, Any]:
     if not session_id:
         return (
             gr.update(),
@@ -384,7 +383,7 @@ async def _delete_session(
 
 async def _load_session_details(
     app_state_value: Any, session_id: Optional[str]
-) -> Tuple[gr.Markdown.update, gr.Markdown.update, gr.Video.update, gr.Gallery.update]:
+) -> Tuple[Any, Any, Any, Any]:
     if not session_id:
         return await asyncio.to_thread(_render_session_details, None)
 
@@ -400,15 +399,15 @@ async def _observe_repository_updates(
     app_state_value: Any,
 ) -> AsyncIterator[
     Tuple[
-        gr.Dropdown.update,
-        gr.Markdown.update,
+        Any,
+        Any,
         Optional[str],
-        gr.Markdown.update,
-        gr.Markdown.update,
-        gr.Video.update,
-        gr.Gallery.update,
-        gr.File.update,
-        gr.Markdown.update,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
     ]
 ]:
     app_state = unwrap_app_state(app_state_value)
@@ -424,7 +423,7 @@ async def _observe_repository_updates(
 
 def _render_session_details(
     stored: Optional[StoredSession],
-) -> Tuple[gr.Markdown.update, gr.Markdown.update, gr.Video.update, gr.Gallery.update]:
+) -> Tuple[Any, Any, Any, Any]:
     if stored is None:
         return (
             gr.Markdown.update(value="Select a session to view details."),
@@ -537,7 +536,7 @@ def _format_assets_markdown(stored: StoredSession) -> str:
     return "\n".join(lines)
 
 
-def _video_update(stored: StoredSession) -> gr.Video.update:
+def _video_update(stored: StoredSession) -> Any:
     video_path = stored.summary.video_path
     if not video_path:
         return gr.Video.update(value=None, visible=False)
