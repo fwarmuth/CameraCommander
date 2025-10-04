@@ -21,6 +21,30 @@ python -m gradio_app
 
 This resolves the app state, builds the UI layout, enables the background queue, and launches the server on `0.0.0.0:7860`. Shutdown signals are forwarded so hardware sessions and background tasks are cleaned up before exit.
 
+### Using `uv` for local runs
+
+If you prefer ephemeral environments, `uv` can materialise the dependencies declared in `pyproject.toml` and execute the module without polluting your global interpreter:
+
+```bash
+uv run python -m gradio_app
+```
+
+Because the project is marked as an installable package, `uv run` exposes both the module (`python -m gradio_app`) and the console script (`gradiocommander`).
+
+### Bootstrapping a fresh deployment with `uv`
+
+For a longer-lived environment (for example, a remote host or brand-new workstation), `uv` can manage the virtual environment and install the package in editable mode:
+
+```bash
+git clone https://github.com/<your-org>/CameraCommander.git
+cd CameraCommander/gradio_app
+uv sync
+source .venv/bin/activate
+gradiocommander
+```
+
+`uv sync` creates a local `.venv`, installs the declared dependencies, and links the `gradio_app` package so the `gradiocommander` command is immediately available. When you are done, deactivate the environment with `deactivate`.
+
 ## Hardware configuration
 
 `AsyncResourceManager` lazily instantiates the camera and tripod adapters the first time a callback requests them. Before driving the tripod tab, make sure a factory has been registered:
