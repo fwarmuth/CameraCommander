@@ -415,7 +415,11 @@ async def _schedule_timelapse(
 
         job_id = uuid.uuid4().hex
         settings = settings.copy(update={"session_id": job_id})
-        job = TimelapseJob(job_id=job_id, settings=settings.to_session_config())
+        job = TimelapseJob(
+            job_id=job_id,
+            settings=settings.to_session_config(),
+            recording=settings,
+        )
         await app_state.start_job(job)
 
     message = _success_message(settings.plan, job_id)

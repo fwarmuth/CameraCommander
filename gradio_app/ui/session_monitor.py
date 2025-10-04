@@ -143,13 +143,23 @@ def _idle_payload(message: str) -> Tuple[Optional[str], gr.Update, gr.Update, gr
 
 
 def _plan_summary(job: TimelapseJob) -> str:
-    try:
-        plan_cfg = job.settings.get("timelapse", {})
-        plan = TimelapsePlan.from_session_config(plan_cfg)
-    except Exception:  # pragma: no cover - defensive guard
-        return "Timelapse configuration unavailable."
+    plan = getattr(job, "recording", None)
+    if plan is not None:
+        try:
+            plan_model = plan.plan
+        except AttributeError:  # pragma: no cover - defensive guard
+            plan_model = None
+    else:
+        plan_model = None
 
-    duration = timedelta(seconds=plan.duration_seconds)
+    if plan_model is None:
+        try:
+            plan_cfg = job.settings.get("timelapse", {})
+            plan_model = TimelapsePlan.from_session_config(plan_cfg)
+        except Exception:  # pragma: no cover - defensive guard
+            return "Timelapse configuration unavailable."
+
+    duration = timedelta(seconds=plan_model.duration_seconds)
     minutes, seconds = divmod(int(duration.total_seconds()), 60)
     hours, minutes = divmod(minutes, 60)
     duration_str = (
@@ -160,10 +170,10 @@ def _plan_summary(job: TimelapseJob) -> str:
 
     return (
         f"**Plan Details**\n"
-        f"- Frames: {plan.total_frames}\n"
-        f"- Interval: {plan.interval_s:.2f}s\n"
+        f"- Frames: {plan_model.total_frames}\n"
+        f"- Interval: {plan_model.interval_s:.2f}s\n"
         f"- Duration: {duration_str}\n"
-        f"- Output: `{plan.output_dir}`"
+        f"- Output: `{plan_model.output_dir}`"
     )
 
 
@@ -171,11 +181,16 @@ def _format_eta(job: TimelapseJob, start_dt: Optional[datetime]) -> str:
     if job.status not in {TimelapseJobStatus.RUNNING, TimelapseJobStatus.PENDING}:
         return "ETA: --"
 
-    plan_cfg = job.settings.get("timelapse", {})
-    total_frames = plan_cfg.get("total_frames")
-    interval_s = plan_cfg.get("interval_s")
-    if not total_frames or not interval_s:
-        return "ETA: estimating..."
+    recording = getattr(job, "recording", None)
+    if recording is not None:
+        total_frames = recording.plan.total_frames
+        interval_s = recording.plan.interval_s
+    else:
+        plan_cfg = job.settings.get("timelapse", {})
+        total_frames = plan_cfg.get("total_frames")
+        interval_s = plan_cfg.get("interval_s")
+        if not total_frames or not interval_s:
+            return "ETA: estimating..."
 
     total_duration = float(total_frames) * float(interval_s)
     progress = max(0.0, min(job.progress, 1.0))

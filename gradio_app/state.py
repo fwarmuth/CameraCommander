@@ -7,10 +7,12 @@ async coordination helpers) so UI callbacks can stay import-light.
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections import defaultdict
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import AsyncIterator, Callable, Dict, Iterable, Iterator, Optional, Set
 
 from .models import TripodSettings
@@ -22,6 +24,9 @@ from .store.session_repository import SessionRepository
 _APP_STATE: ContextVar["AppState"] = ContextVar("app_state")
 _JOB_STREAM_SENTINEL = object()
 _SESSION_STREAM_SENTINEL = object()
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -97,6 +102,10 @@ class AppState:
     # ------------------------------------------------------------------
     async def start_job(self, job: TimelapseJob) -> None:
         """Register *job*, notify listeners, and spawn an update task."""
+
+        if job.recording.session_id != job.job_id:
+            job.recording = job.recording.copy(update={"session_id": job.job_id})
+        job.settings = job.recording.to_session_config()
 
         await self.jobs.start_job(job)
         await self._dispatch_job_update(job)
@@ -242,6 +251,14 @@ class AppState:
         async def _observer() -> None:
             try:
                 async for update in self.jobs.iter_updates(job_id):
+                    if update.status is TimelapseJobStatus.COMPLETED:
+                        try:
+                            await self._archive_completed_job(update)
+                        except Exception as exc:  # pragma: no cover - defensive guard
+                            logger.exception("Failed to archive session %s", job_id)
+                            update.status = TimelapseJobStatus.FAILED
+                            update.message = f"Archiving failed: {exc}"
+                            update.output_path = None
                     await self._dispatch_job_update(update)
             except asyncio.CancelledError:
                 raise
@@ -253,6 +270,31 @@ class AppState:
         task = asyncio.create_task(_observer())
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
+
+    async def _archive_completed_job(self, job: TimelapseJob) -> None:
+        recording = getattr(job, "recording", None)
+        if recording is None:
+            raise ValueError("TimelapseJob is missing recording settings")
+
+        session_id = recording.session_id or job.job_id
+        updated_recording = recording.copy(update={"session_id": session_id})
+        output_dir = Path(updated_recording.plan.output_dir).expanduser().resolve()
+
+        video_path = Path(job.output_path).expanduser().resolve() if job.output_path else None
+
+        stored = await asyncio.to_thread(
+            self.sessions.ingest_completed_session,
+            settings=updated_recording,
+            output_dir=output_dir,
+            session_id=session_id,
+            video_path=video_path,
+        )
+
+        logger.info("Archived session %s at %s", session_id, stored.base_path)
+        job.recording = stored.settings or updated_recording
+        job.message = f"Recording archived to library (session {session_id})"
+        if stored.summary.video_path:
+            job.output_path = stored.summary.video_path
 
     async def _handle_job_exception(self, job_id: str, exc: BaseException) -> None:
         job = await self.jobs.get_job(job_id)

@@ -8,6 +8,7 @@ from enum import Enum, auto
 from typing import AsyncIterator, Dict, Optional
 
 from .timelapse_session import TimelapseError, TimelapseSession
+from ..models import RecordingSettings
 
 
 class TimelapseJobStatus(Enum):
@@ -26,6 +27,7 @@ class TimelapseJob:
 
     job_id: str
     settings: Dict[str, object]
+    recording: RecordingSettings
     status: TimelapseJobStatus = TimelapseJobStatus.PENDING
     progress: float = 0.0
     message: Optional[str] = None
