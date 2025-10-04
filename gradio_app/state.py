@@ -36,6 +36,9 @@ class AppState:
         default_factory=lambda: defaultdict(set), init=False
     )
     _background_tasks: Set[asyncio.Task[None]] = field(default_factory=set, init=False)
+    _hardware_lock_listeners: Set[asyncio.Queue[bool | object]] = field(
+        default_factory=set, init=False
+    )
 
     # ------------------------------------------------------------------
     # Dependency injection helpers
@@ -106,6 +109,26 @@ class AppState:
         finally:
             await self._remove_job_listener(job_id, queue)
 
+    async def subscribe_hardware_lock(self) -> AsyncIterator[bool]:
+        """Yield ``True`` while timelapse jobs hold exclusive hardware access."""
+
+        queue: asyncio.Queue[bool | object] = asyncio.Queue()
+
+        async with self._lock:
+            self._hardware_lock_listeners.add(queue)
+
+        queue.put_nowait(await self.jobs.has_active_job())
+
+        try:
+            while True:
+                update = await queue.get()
+                if update is _JOB_STREAM_SENTINEL:
+                    break
+                yield bool(update)
+        finally:
+            async with self._lock:
+                self._hardware_lock_listeners.discard(queue)
+
     async def _dispatch_job_update(self, job: TimelapseJob) -> None:
         async with self._lock:
             listeners: Iterable[asyncio.Queue[TimelapseJob | object]] = tuple(
@@ -114,6 +137,8 @@ class AppState:
 
         for queue in listeners:
             queue.put_nowait(job)
+
+        await self._notify_hardware_lock()
 
     async def _dispatch_job_closed(self, job_id: str) -> None:
         job = await self.jobs.get_job(job_id)
@@ -129,6 +154,17 @@ class AppState:
 
         for queue in listeners:
             queue.put_nowait(_JOB_STREAM_SENTINEL)
+
+        await self._notify_hardware_lock()
+
+    async def _notify_hardware_lock(self) -> None:
+        locked = await self.jobs.has_active_job()
+
+        async with self._lock:
+            listeners = tuple(self._hardware_lock_listeners)
+
+        for queue in listeners:
+            queue.put_nowait(locked)
 
     async def _remove_job_listener(
         self, job_id: str, queue: asyncio.Queue[TimelapseJob | object]
@@ -191,8 +227,13 @@ class AppState:
                 for queue in queues
             ]
             self._job_listeners.clear()
+            lock_listeners = tuple(self._hardware_lock_listeners)
+            self._hardware_lock_listeners.clear()
 
         for queue in listeners:
+            queue.put_nowait(_JOB_STREAM_SENTINEL)
+
+        for queue in lock_listeners:
             queue.put_nowait(_JOB_STREAM_SENTINEL)
 
         await self.jobs.shutdown()

@@ -168,6 +168,19 @@ class TimelapseJobRunner:
         if worker is not None:
             await worker
 
+    async def has_active_job(self) -> bool:
+        """Return ``True`` if any job currently holds hardware access."""
+
+        async with self._lock:
+            return any(
+                job.status not in {
+                    TimelapseJobStatus.COMPLETED,
+                    TimelapseJobStatus.FAILED,
+                    TimelapseJobStatus.CANCELLED,
+                }
+                for job in self._jobs.values()
+            )
+
     async def purge_completed(self) -> None:
         """Drop finished jobs from the in-memory cache and queues."""
 
