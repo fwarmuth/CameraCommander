@@ -39,3 +39,9 @@ include = [
 
 [project.scripts]
 gradiocommander = "gradio_app.__main__:main"
+
+[tool.uv]
+# Treat the Gradio package as an installable project when using `uv sync`
+# so the `gradiocommander` script and `python -m gradio_app` entry points are
+# available in managed environments.
+package = true
