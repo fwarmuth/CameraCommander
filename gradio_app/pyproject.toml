@@ -33,9 +33,7 @@ dependencies = [
 
 
 [tool.setuptools]
-package-dir = {
-    "" = "src"
-}
+package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
