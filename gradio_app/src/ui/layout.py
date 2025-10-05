@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import gradio as gr
 
-from ..state import AppState, AppStateHandle
+from state import AppState, AppStateHandle
 from . import library, live_control, planner, session_monitor
 
 

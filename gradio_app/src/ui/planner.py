@@ -11,15 +11,15 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 import gradio as gr
 from pydantic import ValidationError
 
-from ..models import (
+from models import (
     CameraSettings,
     RecordingSettings,
     TimelapsePlan,
     TripodSerialSettings,
     TripodSettings,
 )
-from ..services.timelapse_runner import TimelapseJob
-from ..state import AppState
+from services.timelapse_runner import TimelapseJob
+from state import AppState
 from .utils import hardware_access_blocked_message, unwrap_app_state
 
 

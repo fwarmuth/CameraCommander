@@ -8,7 +8,7 @@ from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Optional
 
 from .camera_adapter import CameraAdapter, CameraAdapterError
 from .tripod_adapter import TripodAdapter, TripodAdapterError
-from ..models import TripodSettings
+from models import TripodSettings
 
 __all__ = [
     "AsyncResourceManager",

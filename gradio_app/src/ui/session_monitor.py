@@ -7,9 +7,9 @@ from typing import Any, AsyncIterator, Optional, Tuple
 
 import gradio as gr
 
-from ..models import TimelapsePlan
-from ..services.timelapse_runner import TimelapseJob, TimelapseJobStatus
-from ..state import AppState
+from models import TimelapsePlan
+from services.timelapse_runner import TimelapseJob, TimelapseJobStatus
+from state import AppState
 from .utils import unwrap_app_state
 
 def render_tab(shared_app_state: gr.State, active_job_state: Optional[gr.State] = None) -> gr.Blocks:

@@ -13,7 +13,7 @@ from typing import Callable, Iterable, Optional, Sequence, Set
 
 from pydantic import ValidationError
 
-from ..models import RecordingAsset, RecordingAssetType, RecordingSettings, RecordingSummary
+from models import RecordingAsset, RecordingAssetType, RecordingSettings, RecordingSummary
 
 
 DEFAULT_REPOSITORY_ROOT = Path.home() / ".cameracommander" / "recordings"

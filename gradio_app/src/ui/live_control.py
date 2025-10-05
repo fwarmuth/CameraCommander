@@ -8,8 +8,8 @@ from typing import Dict, Iterable, List, Tuple
 
 import gradio as gr
 
-from ..state import AppState
-from ..services import TripodAdapterError
+from state import AppState
+from services import TripodAdapterError
 from .utils import (
     format_hardware_error,
     hardware_access_blocked_message,

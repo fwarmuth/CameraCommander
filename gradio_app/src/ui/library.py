@@ -10,9 +10,9 @@ from typing import Any, AsyncIterator, Iterable, List, Optional, Sequence, Tuple
 
 import gradio as gr
 
-from ..models import RecordingAssetType
-from ..state import AppState
-from ..store.session_repository import StoredSession
+from models import RecordingAssetType
+from state import AppState
+from store.session_repository import StoredSession
 from .utils import unwrap_app_state
 
 _IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}

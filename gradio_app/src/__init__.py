@@ -30,8 +30,8 @@ def _configure_tempdir() -> None:
 
 _configure_tempdir()
 
-from .state import AppState
-from .ui import build_application
+from state import AppState
+from ui import build_application
 
 __all__ = [
     "__version__",

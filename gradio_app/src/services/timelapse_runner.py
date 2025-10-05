@@ -8,7 +8,7 @@ from enum import Enum, auto
 from typing import AsyncIterator, Dict, Optional
 
 from .timelapse_session import TimelapseError, TimelapseSession
-from ..models import RecordingSettings
+from models import RecordingSettings
 
 
 class TimelapseJobStatus(Enum):
