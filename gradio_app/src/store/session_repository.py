@@ -168,13 +168,17 @@ class SessionRepository:
         )
 
         metadata_path = destination_root / self.METADATA_FILENAME
-        metadata_path.write_text(summary_relative.json(indent=2), encoding="utf-8")
+        metadata_path.write_text(
+            summary_relative.model_dump_json(indent=2), encoding="utf-8"
+        )
 
         stored_settings: Optional[RecordingSettings] = None
         if session.settings is not None:
             stored_settings = session.settings.copy(update={"session_id": session_id})
             settings_path = destination_root / self.SETTINGS_FILENAME
-            settings_path.write_text(stored_settings.json(indent=2), encoding="utf-8")
+            settings_path.write_text(
+                stored_settings.model_dump_json(indent=2), encoding="utf-8"
+            )
 
         stored_session = StoredSession(
             summary=summary_absolute,
