@@ -36,6 +36,7 @@ try:  # pragma: no cover - imported module is optional at runtime
 except ModuleNotFoundError:  # pragma: no cover - defensive
     piexif = None  # noqa: N816 – allow camel-case alias
 
+from logging_utils import ensure_trace_level
 from tqdm import tqdm
 
 from .camera_adapter import CameraAdapter, CameraAdapterError
@@ -43,11 +44,9 @@ from .tripod_adapter import TripodAdapter, TripodAdapterError
 
 __all__ = ["TimelapseSession", "TimelapseError"]
 
+ensure_trace_level()
+
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-_console_handler = logging.StreamHandler()
-_console_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
-logger.addHandler(_console_handler)
 
 ProgressCallback = Callable[[int, int], None]
 EventCallback = Callable[[str, Dict[str, Any]], None]
@@ -61,8 +60,10 @@ class TimelapseSession:
     """High-level controller for a single timelapse capture session."""
 
     def __init__(self, config: Dict[str, Any] | str | Path) -> None:
+        logger.debug("Loading timelapse configuration from %s", config)
         self._cfg = self._load_config(config)
         self._validate_config(self._cfg)
+        logger.debug("Configuration validated successfully")
 
         self.camera: Optional[CameraAdapter] = None
         self.tripod: Optional[TripodAdapter] = None
@@ -87,9 +88,14 @@ class TimelapseSession:
 
         logger.info("Preparing timelapse session")
 
+        logger.info("Initialising camera and tripod adapters")
         self.camera = self._init_camera(self._cfg["camera"])
         self.tripod = self._init_tripod(self._cfg["tripod"])
         self._home_and_goto_start()
+
+        logger.info(
+            "Hardware prepared – output directory %s", self.output_dir
+        )
 
         f_total = self._tl.total_frames
         if f_total < 2:
@@ -100,6 +106,9 @@ class TimelapseSession:
 
         self._check_disk_space()
         self._open_metadata_sink()
+        print(
+            f"[timelapse] Session prepared: {self._tl.total_frames} frames -> {self.output_dir}."
+        )
 
     def run(
         self,
@@ -114,6 +123,9 @@ class TimelapseSession:
 
         self._emit_event("started", event_cb, {"total_frames": self._tl.total_frames})
         logger.info("Starting capture loop (%s frames)", self._tl.total_frames)
+        print(
+            f"[timelapse] Capture started for {self._tl.total_frames} frames."
+        )
 
         start_pan = self._tl.start["pan"]
         start_tilt = self._tl.start["tilt"]
@@ -128,6 +140,7 @@ class TimelapseSession:
 
                 iter_start = time.monotonic()
                 self.capture_frame(idx)
+                logger.trace("Frame %s/%s captured", idx + 1, self._tl.total_frames)
 
                 if progress_cb:
                     progress_cb(idx + 1, self._tl.total_frames)
@@ -137,11 +150,23 @@ class TimelapseSession:
 
                 next_pan = start_pan + (idx + 1) * pan_step
                 next_tilt = start_tilt + (idx + 1) * tilt_step
+                logger.debug(
+                    "Moving tripod to next frame pan=%.4f°, tilt=%.4f°",
+                    next_pan,
+                    next_tilt,
+                )
                 self.tripod.move_to_blocking(pan_deg=next_pan, tilt_deg=next_tilt)
 
                 elapsed = time.monotonic() - iter_start
                 remaining = self._tl.interval_s - elapsed
                 sleep_time = max(self._tl.settle_time_s, remaining)
+                logger.trace(
+                    "Frame %s dwell %.2fs (elapsed %.2fs, remaining %.2fs)",
+                    idx + 1,
+                    sleep_time,
+                    elapsed,
+                    remaining,
+                )
                 self._wait_with_cancellation(sleep_time)
         except Exception as exc:
             self._emit_event("failed", event_cb, {"error": str(exc)})
@@ -149,12 +174,14 @@ class TimelapseSession:
         else:
             if not self._stop_event.is_set():
                 self._emit_event("completed", event_cb, {"total_frames": self._tl.total_frames})
+                print("[timelapse] Capture loop completed.")
         finally:
             self._teardown_hardware()
 
         if self._stop_event.is_set():
             logger.info("Skipping video rendering due to cancellation")
             self._close_metadata_sink()
+            print("[timelapse] Capture cancelled before rendering.")
             return None
 
         if getattr(self._tl, "render_video", True):
@@ -165,6 +192,7 @@ class TimelapseSession:
 
         frames_dir = self.output_dir.resolve()
         logger.info("Frames at %s", frames_dir)
+        print(f"[timelapse] Frames stored at {frames_dir}.")
 
         fps = getattr(self._tl, "video_fps", 30)
         cmd = ["ffmpeg", "-framerate", str(fps), "-i", "frame_%04d.jpg"]
@@ -181,6 +209,7 @@ class TimelapseSession:
             host,
             frames_dir,
         )
+        print("[timelapse] Download hint emitted to logs.")
 
         return video_path
 
@@ -240,6 +269,7 @@ class TimelapseSession:
         """Render *timelapse.mp4* using ffmpeg. Returns the Path."""
 
         logger.info("Rendering video with ffmpeg")
+        print(f"[timelapse] Rendering video to {self.video_path}.")
 
         cmd: list[str] = [
             "ffmpeg",
@@ -283,6 +313,7 @@ class TimelapseSession:
             raise TimelapseError(f"ffmpeg failed: {stderr}")
 
         logger.info("Video written to %s", self.video_path)
+        print(f"[timelapse] Video available at {self.video_path}.")
         return self.video_path
 
     def _init_camera(self, cam_cfg: Dict[str, Any]) -> CameraAdapter:
@@ -300,6 +331,7 @@ class TimelapseSession:
 
         if cam_cfg:
             logger.info("Applying %s camera settings", len(cam_cfg))
+            logger.debug("Camera settings detail: %s", cam_cfg)
             try:
                 camera.apply_settings(cam_cfg)
             except CameraAdapterError as exc:
@@ -321,12 +353,14 @@ class TimelapseSession:
         if self.tripod is None:
             raise TimelapseError("Tripod not initialised")
 
+        logger.info("Resetting tripod position")
         self.tripod.reset_position()
         start_pan = self._tl.start["pan"]
         start_tilt = self._tl.start["tilt"]
         logger.info("Moving tripod to start position pan=%.2f°, tilt=%.2f°", start_pan, start_tilt)
         self.tripod.move_to_blocking(pan_deg=start_pan, tilt_deg=start_tilt)
         self.tripod.enable_drivers(True)
+        logger.info("Tripod ready at start position")
 
     @staticmethod
     def _load_config(src: Dict[str, Any] | str | Path) -> Dict[str, Any]:
@@ -374,6 +408,7 @@ class TimelapseSession:
             raise TimelapseError("interval_s must be ≥ settle_time_s")
 
     def _check_disk_space(self) -> None:
+        logger.debug("Checking disk space for %s", self.output_dir)
         usage = shutil.disk_usage(self.output_dir)
         need_bytes = self._tl.total_frames * 20_000_000
         if usage.free < need_bytes:
@@ -385,6 +420,7 @@ class TimelapseSession:
 
     def _open_metadata_sink(self) -> None:
         if piexif:
+            logger.debug("piexif available – EXIF metadata will be embedded")
             return
         meta_path = self.output_dir / "metadata.csv"
         is_new = not meta_path.exists()
@@ -395,14 +431,18 @@ class TimelapseSession:
         )
         if is_new:
             self._metadata_csv.writeheader()
+            logger.debug("Created new metadata.csv with header")
+        logger.info("Metadata CSV sink opened at %s", meta_path)
 
     def _close_metadata_sink(self) -> None:
         if self._metadata_file_handle:
             self._metadata_file_handle.close()
             self._metadata_file_handle = None
             self._metadata_csv = None
+            logger.info("Metadata sink closed")
 
     def _teardown_hardware(self) -> None:
+        logger.info("Tearing down hardware state")
         try:
             if self.tripod:
                 self.tripod.enable_drivers(False)
@@ -433,7 +473,9 @@ class TimelapseSession:
         payload: Optional[Dict[str, Any]] = None,
     ) -> None:
         if event_cb is None:
+            logger.trace("Event %s ignored (no callback)", name)
             return
+        logger.debug("Emitting event %s with payload %s", name, payload)
         event_cb(name, payload or {})
 
     def _sigint_handler(self, signum, frame) -> None:  # noqa: D401 - inherited signature

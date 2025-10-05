@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import AsyncIterator, Callable, Dict, Iterable, Iterator, Optional, Set
 
+from logging_utils import ensure_trace_level
 from models import TripodSettings
 from services import AsyncResourceManager, TimelapseJobRunner, TripodAdapter
 from services.resources import tripod_adapter_from_settings
@@ -25,6 +26,8 @@ _APP_STATE: ContextVar["AppState"] = ContextVar("app_state")
 _JOB_STREAM_SENTINEL = object()
 _SESSION_STREAM_SENTINEL = object()
 
+
+ensure_trace_level()
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +75,8 @@ class AppState:
         if self.tripod_settings is not None:
             self.set_tripod_settings(self.tripod_settings)
 
+        logger.info("AppState initialised")
+
     def __deepcopy__(self, memo: Dict[int, object]) -> "AppState":
         """Preserve identity when libraries attempt to clone the state."""
 
@@ -113,6 +118,7 @@ class AppState:
             job.recording = job.recording.copy(update={"session_id": job.job_id})
         job.settings = job.recording.to_session_config()
 
+        logger.info("Submitting job %s to runner", job.job_id)
         await self.jobs.start_job(job)
         await self._dispatch_job_update(job)
         self._spawn_job_observer(job.job_id)
@@ -120,6 +126,9 @@ class AppState:
     async def publish_job_update(self, job: TimelapseJob) -> None:
         """Fan out *job* updates and close the stream on terminal states."""
 
+        logger.debug(
+            "Publishing update for job %s (status=%s)", job.job_id, job.status
+        )
         await self._dispatch_job_update(job)
         if job.status in {
             TimelapseJobStatus.COMPLETED,
@@ -200,6 +209,7 @@ class AppState:
             queue.put_nowait(job)
 
         await self._notify_hardware_lock()
+        logger.trace("Dispatched update for job %s to %s listeners", job.job_id, len(listeners))
 
     async def _dispatch_job_closed(self, job_id: str) -> None:
         job = await self.jobs.get_job(job_id)
@@ -217,9 +227,11 @@ class AppState:
             queue.put_nowait(_JOB_STREAM_SENTINEL)
 
         await self._notify_hardware_lock()
+        logger.debug("Closed job stream for %s", job_id)
 
     async def _notify_hardware_lock(self) -> None:
         locked = await self.jobs.has_active_job()
+        logger.debug("Hardware lock state -> %s", locked)
 
         async with self._lock:
             listeners = tuple(self._hardware_lock_listeners)
@@ -235,6 +247,7 @@ class AppState:
 
     def _notify_session_change(self) -> None:
         self._session_version += 1
+        logger.debug("Session repository changed -> version %s", self._session_version)
 
         listeners: Iterable[asyncio.Queue[int | object]]
         listeners = tuple(self._session_listeners)
@@ -276,6 +289,7 @@ class AppState:
         task = asyncio.create_task(_observer())
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
+        logger.debug("Spawned job observer for %s", job_id)
 
     async def _archive_completed_job(self, job: TimelapseJob) -> None:
         recording = getattr(job, "recording", None)
@@ -297,6 +311,7 @@ class AppState:
         )
 
         logger.info("Archived session %s at %s", session_id, stored.base_path)
+        print(f"[timelapse] Session {session_id} archived to {stored.base_path}.")
         job.recording = stored.settings or updated_recording
         job.message = f"Recording archived to library (session {session_id})"
         if stored.summary.video_path:
@@ -320,6 +335,7 @@ class AppState:
             return
 
         self._shutdown_event.set()
+        logger.info("AppState shutdown initiated")
 
         if self._session_repo_listener is not None:
             self.sessions.remove_change_listener(self._session_repo_listener)
@@ -356,6 +372,7 @@ class AppState:
 
         await self.jobs.shutdown()
         await self.resources.shutdown()
+        logger.info("AppState shutdown complete")
 
     # ------------------------------------------------------------------
     # Tripod configuration helpers

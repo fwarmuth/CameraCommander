@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import AsyncIterator, Dict, Optional
 
+from logging_utils import ensure_trace_level
 from .timelapse_session import TimelapseError, TimelapseSession
 from models import RecordingSettings
+
+ensure_trace_level()
+logger = logging.getLogger(__name__)
 
 
 class TimelapseJobStatus(Enum):
@@ -50,6 +55,7 @@ class TimelapseJobRunner:
     async def start_job(self, job: TimelapseJob) -> None:
         """Register *job*, spawn the session, and publish initial state."""
 
+        logger.info("Starting timelapse job %s", job.job_id)
         session = TimelapseSession(job.settings)
         queue: asyncio.Queue[TimelapseJob | object] = asyncio.Queue()
         loop = asyncio.get_running_loop()
@@ -59,6 +65,7 @@ class TimelapseJobRunner:
                 job.progress = done / total if total else 0.0
                 job.message = f"Captured {done}/{total} frames"
                 queue.put_nowait(job)
+                logger.debug("Job %s progress %s/%s", job.job_id, done, total)
 
             loop.call_soon_threadsafe(_notify)
 
@@ -66,11 +73,15 @@ class TimelapseJobRunner:
             def _notify() -> None:
                 if name == "started":
                     job.message = "Timelapse capture started"
+                    print(f"[timelapse] Job {job.job_id} started.")
                 elif name == "completed":
                     job.message = "Capture loop finished"
+                    print(f"[timelapse] Job {job.job_id} capture completed.")
                 elif name == "failed":
                     error = payload.get("error", "unknown error")
                     job.message = f"Capture failed: {error}"
+                    print(f"[timelapse] Job {job.job_id} failed: {error}")
+                logger.debug("Job %s event %s payload=%s", job.job_id, name, payload)
                 queue.put_nowait(job)
 
             loop.call_soon_threadsafe(_notify)
@@ -84,6 +95,8 @@ class TimelapseJobRunner:
         job.progress = 0.0
         job.message = "Timelapse job scheduled"
         queue.put_nowait(job)
+        print(f"[timelapse] Job {job.job_id} scheduled.")
+        logger.info("Job %s scheduled", job.job_id)
 
         async def _worker() -> None:
             try:
@@ -97,28 +110,46 @@ class TimelapseJobRunner:
                 job.message = str(exc)
                 job.output_path = None
                 queue.put_nowait(job)
+                logger.error("Job %s failed: %s", job.job_id, exc)
+                print(f"[timelapse] Job {job.job_id} failed: {exc}.")
             except Exception as exc:  # pragma: no cover - defensive guard
                 job.status = TimelapseJobStatus.FAILED
                 job.message = f"Unexpected failure: {exc}"
                 job.output_path = None
                 queue.put_nowait(job)
+                logger.exception("Job %s unexpected failure", job.job_id)
+                print(f"[timelapse] Job {job.job_id} failed unexpectedly: {exc}.")
             else:
                 if job.status is TimelapseJobStatus.CANCELLED or session.stop_requested:
                     if session.stop_requested and job.status is TimelapseJobStatus.RUNNING:
                         job.status = TimelapseJobStatus.CANCELLED
                     job.message = job.message or "Timelapse cancelled"
                     job.output_path = None
+                    logger.info("Job %s cancelled", job.job_id)
+                    print(f"[timelapse] Job {job.job_id} cancelled.")
                 else:
                     job.status = TimelapseJobStatus.COMPLETED
                     job.progress = 1.0
                     job.output_path = str(result) if result else None
                     job.message = job.message or "Timelapse completed successfully"
+                    logger.info(
+                        "Job %s completed successfully (output=%s)",
+                        job.job_id,
+                        job.output_path,
+                    )
+                    if job.output_path:
+                        print(
+                            f"[timelapse] Job {job.job_id} completed. Output: {job.output_path}."
+                        )
+                    else:
+                        print(f"[timelapse] Job {job.job_id} completed without video output.")
                 queue.put_nowait(job)
             finally:
                 queue.put_nowait(_QUEUE_SENTINEL)
                 async with self._lock:
                     self._workers.pop(job.job_id, None)
                     self._sessions.pop(job.job_id, None)
+                logger.debug("Job %s worker finished", job.job_id)
 
         worker = asyncio.create_task(_worker())
         async with self._lock:
@@ -163,6 +194,7 @@ class TimelapseJobRunner:
 
         job.status = TimelapseJobStatus.CANCELLED
         job.message = "Cancellation requested"
+        logger.info("Cancellation requested for job %s", job_id)
         if queue is not None:
             queue.put_nowait(job)
         if session is not None:
@@ -174,7 +206,7 @@ class TimelapseJobRunner:
         """Return ``True`` if any job currently holds hardware access."""
 
         async with self._lock:
-            return any(
+            active = any(
                 job.status not in {
                     TimelapseJobStatus.COMPLETED,
                     TimelapseJobStatus.FAILED,
@@ -182,6 +214,8 @@ class TimelapseJobRunner:
                 }
                 for job in self._jobs.values()
             )
+        logger.debug("Active job check -> %s", active)
+        return active
 
     async def purge_completed(self) -> None:
         """Drop finished jobs from the in-memory cache and queues."""
@@ -209,6 +243,7 @@ class TimelapseJobRunner:
 
         for session in sessions:
             session.request_stop()
+        logger.info("Shutdown requested – %s sessions notified", len(sessions))
         if workers:
             await asyncio.gather(*workers, return_exceptions=True)
 
@@ -217,3 +252,4 @@ class TimelapseJobRunner:
             self._sessions.clear()
             self._queues.clear()
             self._jobs.clear()
+        logger.info("Job runner shutdown complete")
