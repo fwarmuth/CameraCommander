@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 
+from models import TripodSerialSettings, TripodSettings
 from state import AppState
 import ui
 
@@ -11,10 +12,16 @@ _SERVER_NAME = "0.0.0.0"
 _SERVER_PORT = 8000
 
 
+_DEFAULT_TRIPOD_SETTINGS = TripodSettings(
+    serial=TripodSerialSettings(port="/dev/ttyUSB0", baudrate=9600),
+    microstep=16,
+)
+
+
 async def _async_main() -> None:
     """Bootstrap and launch the Gradio application."""
 
-    app_state = AppState()
+    app_state = AppState(tripod_settings=_DEFAULT_TRIPOD_SETTINGS)
     app = ui.build_application(app_state)
 
     # Enable background processing and block until the server stops.
