@@ -112,12 +112,12 @@ def render_tab(
 
         gr.Markdown("### Tripod Settings")
         with gr.Row():
-            tripod_port = gr.Textbox(label="Serial Port", placeholder="/dev/ttyUSB0")
+            tripod_port = gr.Textbox(label="Serial Port", value="/dev/ttyUSB0")
             tripod_baud = gr.Number(label="Baud Rate", precision=0, value=9600)
             tripod_microstep = gr.Number(
                 label="Microstep",
                 precision=0,
-                value=None,
+                value=8,
             )
         with gr.Row():
             tripod_options = gr.Textbox(
