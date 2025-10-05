@@ -211,10 +211,10 @@ async def _refresh_library(
 
     app_state.library_selected_session = selection
 
-    dropdown_update = gr.Dropdown.update(
+    dropdown_update = gr.update(
         choices=_format_dropdown_choices(sessions), value=selection
     )
-    overview_update = gr.Markdown.update(value=_format_session_overview(sessions))
+    overview_update = gr.update(value=_format_session_overview(sessions))
 
     session_lookup = {session.summary.session_id: session for session in sessions}
     stored = session_lookup.get(selection) if selection else None
@@ -223,8 +223,8 @@ async def _refresh_library(
         _render_session_details, stored
     )
 
-    archive_update = gr.File.update(value=None, visible=False)
-    status_update = gr.Markdown.update() if keep_status else gr.Markdown.update(value="")
+    archive_update = gr.update(value=None, visible=False)
+    status_update = gr.update() if keep_status else gr.update(value="")
 
     return (
         dropdown_update,
@@ -257,8 +257,8 @@ async def _select_session(
         app_state_value, session_id
     )
 
-    archive_update = gr.File.update(value=None, visible=False)
-    status_update = gr.Markdown.update(value="" if session_id else "Select a session.")
+    archive_update = gr.update(value=None, visible=False)
+    status_update = gr.update(value="" if session_id else "Select a session.")
 
     return (
         session_id,
@@ -276,8 +276,8 @@ async def _prepare_archive(
 ) -> Tuple[Any, Any]:
     if not session_id:
         return (
-            gr.File.update(value=None, visible=False),
-            gr.Markdown.update(value="Select a session to prepare an archive."),
+            gr.update(value=None, visible=False),
+            gr.update(value="Select a session to prepare an archive."),
         )
 
     app_state = unwrap_app_state(app_state_value)
@@ -287,15 +287,15 @@ async def _prepare_archive(
 
     if stored is None:
         return (
-            gr.File.update(value=None, visible=False),
-            gr.Markdown.update(value=f"Session `{session_id}` not found."),
+            gr.update(value=None, visible=False),
+            gr.update(value=f"Session `{session_id}` not found."),
         )
 
     archive_path = await asyncio.to_thread(_create_archive, stored)
 
     return (
-        gr.File.update(value=str(archive_path), visible=True),
-        gr.Markdown.update(value=f"Archive ready for session `{session_id}`."),
+        gr.update(value=str(archive_path), visible=True),
+        gr.update(value=f"Archive ready for session `{session_id}`."),
     )
 
 
@@ -305,7 +305,7 @@ async def _clone_to_planner(
     if not session_id:
         return (
             gr.update(),
-            gr.Markdown.update(value="Select a session to clone into the planner."),
+            gr.update(value="Select a session to clone into the planner."),
         )
 
     app_state = unwrap_app_state(app_state_value)
@@ -316,7 +316,7 @@ async def _clone_to_planner(
     if stored is None or stored.settings is None:
         return (
             gr.update(),
-            gr.Markdown.update(
+            gr.update(
                 value=f"Session `{session_id}` does not include saved planner settings."
             ),
         )
@@ -324,7 +324,7 @@ async def _clone_to_planner(
     request = {"session_id": session_id, "nonce": uuid.uuid4().hex}
     return (
         request,
-        gr.Markdown.update(value=f"Planner preset loaded from session `{session_id}`."),
+        gr.update(value=f"Planner preset loaded from session `{session_id}`."),
     )
 
 
@@ -341,7 +341,7 @@ async def _delete_session(
             gr.update(),
             gr.update(),
             gr.update(),
-            gr.Markdown.update(value="Select a session to delete."),
+            gr.update(value="Select a session to delete."),
         )
 
     app_state = unwrap_app_state(app_state_value)
@@ -366,7 +366,7 @@ async def _delete_session(
         keep_status=True,
     )
 
-    status_update = gr.Markdown.update(value=message)
+    status_update = gr.update(value=message)
 
     return (
         dropdown_update,
@@ -426,10 +426,10 @@ def _render_session_details(
 ) -> Tuple[Any, Any, Any, Any]:
     if stored is None:
         return (
-            gr.Markdown.update(value="Select a session to view details."),
-            gr.Markdown.update(value=""),
-            gr.Video.update(value=None, visible=False),
-            gr.Gallery.update(value=[], visible=False),
+            gr.update(value="Select a session to view details."),
+            gr.update(value=""),
+            gr.update(value=None, visible=False),
+            gr.update(value=[], visible=False),
         )
 
     summary = stored.summary
@@ -462,11 +462,11 @@ def _render_session_details(
     assets_md = _format_assets_markdown(stored)
     video_update = _video_update(stored)
     gallery_items = _gather_gallery_items(stored)
-    gallery_update = gr.Gallery.update(value=gallery_items, visible=bool(gallery_items))
+    gallery_update = gr.update(value=gallery_items, visible=bool(gallery_items))
 
     return (
-        gr.Markdown.update(value="\n".join(lines)),
-        gr.Markdown.update(value=assets_md),
+        gr.update(value="\n".join(lines)),
+        gr.update(value=assets_md),
         video_update,
         gallery_update,
     )
@@ -539,18 +539,18 @@ def _format_assets_markdown(stored: StoredSession) -> str:
 def _video_update(stored: StoredSession) -> Any:
     video_path = stored.summary.video_path
     if not video_path:
-        return gr.Video.update(value=None, visible=False)
+        return gr.update(value=None, visible=False)
 
     path = Path(video_path)
     try:
         resolved = path.resolve()
     except OSError:
-        return gr.Video.update(value=None, visible=False)
+        return gr.update(value=None, visible=False)
 
     if not resolved.is_file() or not _is_within_root(resolved, stored.base_path):
-        return gr.Video.update(value=None, visible=False)
+        return gr.update(value=None, visible=False)
 
-    return gr.Video.update(value=str(resolved), visible=True)
+    return gr.update(value=str(resolved), visible=True)
 
 
 def _gather_gallery_items(stored: StoredSession, limit: int = 12) -> List[Tuple[str, str]]:

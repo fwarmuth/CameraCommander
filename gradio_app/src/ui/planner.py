@@ -242,7 +242,7 @@ async def _load_preset_choices(app_state_value: Any) -> Any:
         display = f"{label} — {timestamp} ({session.summary.session_id})"
         choices.append((display, session.summary.session_id))
 
-    return gr.Dropdown.update(choices=choices, value=None)
+    return gr.update(choices=choices, value=None)
 
 
 async def _clone_preset(app_state_value: Any, request: Optional[Any]) -> Tuple[Any, ...]:
@@ -323,13 +323,13 @@ async def _observe_hardware_lock(app_state_value: Any) -> AsyncIterator[Tuple[An
         async for locked in app_state.subscribe_hardware_lock():
             if locked:
                 yield (
-                    gr.Button.update(interactive=False),
-                    gr.Markdown.update(value=hardware_access_blocked_message()),
+                    gr.update(interactive=False),
+                    gr.update(value=hardware_access_blocked_message()),
                 )
             else:
                 yield (
-                    gr.Button.update(interactive=True),
-                    gr.Markdown.update(value=""),
+                    gr.update(interactive=True),
+                    gr.update(value=""),
                 )
 
 
@@ -386,28 +386,28 @@ async def _schedule_timelapse(
         )
     except ValidationError as exc:
         return (
-            gr.Markdown.update(value=f"❌ Validation failed:\n````\n{exc}\n````"),
+            gr.update(value=f"❌ Validation failed:\n````\n{exc}\n````"),
             current_job_id,
-            gr.Textbox.update(),
-            gr.Markdown.update(value=""),
+            gr.update(),
+            gr.update(value=""),
         )
     except ValueError as exc:
         return (
-            gr.Markdown.update(value=f"❌ {exc}"),
+            gr.update(value=f"❌ {exc}"),
             current_job_id,
-            gr.Textbox.update(),
-            gr.Markdown.update(value=""),
+            gr.update(),
+            gr.update(value=""),
         )
 
     with AppState.use(app_state):
         if await app_state.jobs.has_active_job():
             return (
-                gr.Markdown.update(
+                gr.update(
                     value="⚠️ Cannot schedule a new job while another session is active."
                 ),
                 current_job_id,
-                gr.Textbox.update(),
-                gr.Markdown.update(value=_summarise_plan(settings.plan)),
+                gr.update(),
+                gr.update(value=_summarise_plan(settings.plan)),
             )
 
         app_state.set_tripod_settings(settings.tripod)
@@ -424,10 +424,10 @@ async def _schedule_timelapse(
     message = _success_message(settings.plan, job_id)
     summary = _summarise_plan(settings.plan)
     return (
-        gr.Markdown.update(value=message),
+        gr.update(value=message),
         job_id,
-        gr.Textbox.update(value=job_id),
-        gr.Markdown.update(value=summary),
+        gr.update(value=job_id),
+        gr.update(value=summary),
     )
 
 
@@ -529,7 +529,7 @@ def _parse_tags(raw: Optional[str]) -> List[str]:
 
 
 def _toggle_video_options(render_video: bool) -> Any:
-    return gr.Number.update(interactive=render_video)
+    return gr.update(interactive=render_video)
 
 
 def _format_json(payload: Dict[str, Any]) -> str:

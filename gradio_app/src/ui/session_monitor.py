@@ -95,13 +95,13 @@ async def _monitor_active_job(
 
 async def _cancel_job(app_state_value: Any, job_id: Optional[str]) -> Any:
     if not job_id:
-        return gr.Markdown.update(value="No active job to cancel.")
+        return gr.update(value="No active job to cancel.")
 
     app_state = unwrap_app_state(app_state_value)
     with AppState.use(app_state):
         await app_state.jobs.cancel_job(job_id)
 
-    return gr.Markdown.update(value=f"Cancellation requested for job `{job_id}`.")
+    return gr.update(value=f"Cancellation requested for job `{job_id}`.")
 
 
 def _job_payload(
@@ -118,12 +118,12 @@ def _job_payload(
 
     return (
         job.job_id,
-        gr.Markdown.update(value=heading),
-        gr.Markdown.update(value=plan_summary),
-        gr.Slider.update(value=progress_percent),
-        gr.Markdown.update(value=eta),
-        gr.Markdown.update(value=status),
-        gr.Button.update(interactive=cancel_enabled),
+        gr.update(value=heading),
+        gr.update(value=plan_summary),
+        gr.update(value=progress_percent),
+        gr.update(value=eta),
+        gr.update(value=status),
+        gr.update(interactive=cancel_enabled),
         next_start,
     )
 
@@ -131,12 +131,12 @@ def _job_payload(
 def _idle_payload(message: str) -> Tuple[Optional[str], Any, Any, Any, Any, Any, Any, Optional[str]]:
     return (
         None,
-        gr.Markdown.update(value="### No active session"),
-        gr.Markdown.update(value=""),
-        gr.Slider.update(value=0.0),
-        gr.Markdown.update(value="ETA: --"),
-        gr.Markdown.update(value=message),
-        gr.Button.update(interactive=False),
+        gr.update(value="### No active session"),
+        gr.update(value=""),
+        gr.update(value=0.0),
+        gr.update(value="ETA: --"),
+        gr.update(value=message),
+        gr.update(interactive=False),
         None,
     )
 
