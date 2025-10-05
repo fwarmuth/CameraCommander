@@ -8,6 +8,7 @@ from io import BytesIO
 from typing import Dict, Iterable, List, Tuple
 
 import gradio as gr
+import numpy as np
 from PIL import Image, UnidentifiedImageError
 
 from state import AppState
@@ -235,14 +236,14 @@ async def _refresh_live_view(
     return gr.update(value=frame), True, gr.update()
 
 
-def _decode_preview_image(payload: bytes) -> Image.Image:
-    """Convert raw preview bytes into a Pillow image for Gradio rendering."""
+def _decode_preview_image(payload: bytes) -> np.ndarray:
+    """Convert raw preview bytes into an array suitable for Gradio rendering."""
     try:
         with Image.open(BytesIO(payload)) as img:
             if img.mode not in {"RGB", "RGBA"}:
                 img = img.convert("RGB")
-            return img.copy()
-    except (UnidentifiedImageError, OSError) as exc:
+            return np.array(img)
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
         raise ValueError("Preview payload is not a recognised image") from exc
 
 
