@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import uuid
 from datetime import timedelta
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
@@ -20,7 +21,9 @@ from models import (
 )
 from services.timelapse_runner import TimelapseJob
 from state import AppState
-from .utils import hardware_access_blocked_message, unwrap_app_state
+from .utils import hardware_access_blocked_message, log_button_click, unwrap_app_state
+
+logger = logging.getLogger(__name__)
 
 
 def render_tab(
@@ -138,7 +141,11 @@ def render_tab(
             outputs=[preset_dropdown],
         )
         refresh_presets.click(
-            _load_preset_choices,
+            log_button_click(
+                "Refresh Presets",
+                _load_preset_choices,
+                logger=logger,
+            ),
             inputs=[shared_app_state],
             outputs=[preset_dropdown],
         )
@@ -170,7 +177,11 @@ def render_tab(
         ]
 
         apply_preset.click(
-            _clone_preset,
+            log_button_click(
+                "Clone Selected Preset",
+                _clone_preset,
+                logger=logger,
+            ),
             inputs=[shared_app_state, preset_dropdown],
             outputs=preset_outputs,
         )
@@ -216,7 +227,11 @@ def render_tab(
         ]
 
         submit_button.click(
-            _schedule_timelapse,
+            log_button_click(
+                "Schedule Timelapse",
+                _schedule_timelapse,
+                logger=logger,
+            ),
             inputs=submission_inputs,
             outputs=[status_message, active_job_state, job_id_display, plan_summary],
         )

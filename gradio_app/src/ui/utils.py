@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
-from typing import Any
+from typing import Any, Awaitable, Callable, ParamSpec, TypeVar
 
 from services import CameraAdapterError, ServiceError, TripodAdapterError
 from state import AppState, AppStateHandle
@@ -12,6 +13,37 @@ logger = logging.getLogger(__name__)
 
 
 _HARDWARE_ERRORS = (ServiceError, CameraAdapterError, TripodAdapterError)
+
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+def log_button_click(
+    label: str,
+    callback: Callable[P, R],
+    *,
+    logger: logging.Logger,
+) -> Callable[P, Awaitable[R]]:
+    """Return a callback that logs the originating button before execution."""
+
+    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        logger.info("Button '%s' clicked", label)
+        try:
+            result = callback(*args, **kwargs)
+        except Exception:  # pragma: no cover - logging helper
+            logger.exception("Button '%s' handler raised", label)
+            raise
+
+        if inspect.isawaitable(result):
+            try:
+                return await result
+            except Exception:  # pragma: no cover - logging helper
+                logger.exception("Button '%s' handler failed", label)
+                raise
+
+        return result
+
+    return wrapper
 
 
 def unwrap_app_state(value: Any) -> AppState:

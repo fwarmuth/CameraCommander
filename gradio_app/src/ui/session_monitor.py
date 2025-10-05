@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncIterator, Optional, Tuple
 
@@ -10,7 +11,9 @@ import gradio as gr
 from models import TimelapsePlan
 from services.timelapse_runner import TimelapseJob, TimelapseJobStatus
 from state import AppState
-from .utils import unwrap_app_state
+from .utils import log_button_click, unwrap_app_state
+
+logger = logging.getLogger(__name__)
 
 def render_tab(shared_app_state: gr.State, active_job_state: Optional[gr.State] = None) -> gr.Blocks:
     """Render the Active Session monitoring tab."""
@@ -38,7 +41,11 @@ def render_tab(shared_app_state: gr.State, active_job_state: Optional[gr.State] 
         cancel_button = gr.Button("Cancel Active Job", variant="stop", interactive=False)
 
         cancel_button.click(
-            _cancel_job,
+            log_button_click(
+                "Cancel Active Job",
+                _cancel_job,
+                logger=logger,
+            ),
             inputs=[shared_app_state, active_job_state],
             outputs=[status_message],
         )

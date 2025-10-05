@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 import zipfile
 from pathlib import Path
@@ -13,7 +14,9 @@ import gradio as gr
 from models import RecordingAssetType
 from state import AppState
 from store.session_repository import StoredSession
-from .utils import unwrap_app_state
+from .utils import log_button_click, unwrap_app_state
+
+logger = logging.getLogger(__name__)
 
 _IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 
@@ -89,7 +92,11 @@ def render_tab(
         )
 
         refresh_button.click(
-            _refresh_library,
+            log_button_click(
+                "Refresh Sessions",
+                _refresh_library,
+                logger=logger,
+            ),
             inputs=[shared_app_state, selected_session_state],
             outputs=[
                 session_dropdown,
@@ -119,19 +126,31 @@ def render_tab(
         )
 
         archive_button.click(
-            _prepare_archive,
+            log_button_click(
+                "Prepare Archive Download",
+                _prepare_archive,
+                logger=logger,
+            ),
             inputs=[shared_app_state, selected_session_state],
             outputs=[archive_file, status_message],
         )
 
         clone_button.click(
-            _clone_to_planner,
+            log_button_click(
+                "Clone Settings to Planner",
+                _clone_to_planner,
+                logger=logger,
+            ),
             inputs=[shared_app_state, selected_session_state],
             outputs=[planner_clone_state, status_message],
         )
 
         delete_button.click(
-            _delete_session,
+            log_button_click(
+                "Delete Session",
+                _delete_session,
+                logger=logger,
+            ),
             inputs=[shared_app_state, selected_session_state],
             outputs=[
                 session_dropdown,

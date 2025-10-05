@@ -16,6 +16,7 @@ from services import TripodAdapterError
 from .utils import (
     format_hardware_error,
     hardware_access_blocked_message,
+    log_button_click,
     unwrap_app_state,
 )
 
@@ -97,12 +98,20 @@ def render_tab(shared_app_state: gr.State) -> gr.Blocks:
 
         # Live view controls -------------------------------------------------
         start_live.click(
-            _start_live_view,
+            log_button_click(
+                "Start Live View",
+                _start_live_view,
+                logger=logger,
+            ),
             inputs=[shared_app_state, live_view_active],
             outputs=[live_view_active, live_view, status_message],
         )
         stop_live.click(
-            _stop_live_view,
+            log_button_click(
+                "Stop Live View",
+                _stop_live_view,
+                logger=logger,
+            ),
             inputs=[live_view_active],
             outputs=[live_view_active, status_message],
         )
@@ -120,9 +129,15 @@ def render_tab(shared_app_state: gr.State) -> gr.Blocks:
         )
 
         # Focus controls -----------------------------------------------------
-        for button, (_, direction, step) in zip(focus_buttons, _FOCUS_PRESETS):
+        for button, (label, direction, step) in zip(focus_buttons, _FOCUS_PRESETS):
             button.click(
-                functools.partial(_nudge_focus, direction=direction, step=step),
+                log_button_click(
+                    label,
+                    functools.partial(
+                        _nudge_focus, direction=direction, step=step
+                    ),
+                    logger=logger,
+                ),
                 inputs=[shared_app_state],
                 outputs=status_message,
             )
@@ -142,14 +157,22 @@ def render_tab(shared_app_state: gr.State) -> gr.Blocks:
             )
 
         # Tripod controls ----------------------------------------------------
-        for button, (_, pan, tilt) in zip(tripod_buttons, _TRIPOD_JOG_PRESETS):
+        for button, (label, pan, tilt) in zip(tripod_buttons, _TRIPOD_JOG_PRESETS):
             button.click(
-                functools.partial(_jog_tripod, pan=pan, tilt=tilt),
+                log_button_click(
+                    label,
+                    functools.partial(_jog_tripod, pan=pan, tilt=tilt),
+                    logger=logger,
+                ),
                 inputs=[shared_app_state],
                 outputs=status_message,
             )
         stop_tripod.click(
-            _stop_tripod,
+            log_button_click(
+                "Stop Tripod",
+                _stop_tripod,
+                logger=logger,
+            ),
             inputs=[shared_app_state],
             outputs=status_message,
         )
