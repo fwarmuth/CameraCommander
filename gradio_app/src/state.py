@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import AsyncIterator, Callable, Dict, Iterable, Iterator, Optional, Set
+from typing import TYPE_CHECKING, AsyncIterator, Callable, Dict, Iterable, Iterator, Optional, Set
 
 from logging_utils import ensure_trace_level
 from models import TripodSettings
@@ -21,6 +21,9 @@ from services import AsyncResourceManager, TimelapseJobRunner, TripodAdapter
 from services.resources import tripod_adapter_from_settings
 from services.timelapse_runner import TimelapseJob, TimelapseJobStatus
 from store.session_repository import SessionRepository
+
+if TYPE_CHECKING:  # pragma: no cover - import for type checking only
+    from services import CameraAdapter
 
 _APP_STATE: ContextVar["AppState"] = ContextVar("app_state")
 _JOB_STREAM_SENTINEL = object()
@@ -117,6 +120,8 @@ class AppState:
         if job.recording.session_id != job.job_id:
             job.recording = job.recording.copy(update={"session_id": job.job_id})
         job.settings = job.recording.to_session_config()
+        job.camera_factory = self._shared_camera_factory()
+        job.tripod_factory = self._shared_tripod_factory()
 
         logger.info("Submitting job %s to runner", job.job_id)
         await self.jobs.start_job(job)
@@ -324,6 +329,34 @@ class AppState:
         job.status = TimelapseJobStatus.FAILED
         job.message = str(exc)
         await self._dispatch_job_update(job)
+
+    # ------------------------------------------------------------------
+    # Timelapse dependency factories
+    # ------------------------------------------------------------------
+    def _ensure_loop(self) -> asyncio.AbstractEventLoop:
+        if self._loop is None:
+            self._loop = asyncio.get_running_loop()
+        return self._loop
+
+    def _shared_camera_factory(self) -> Callable[[], "CameraAdapter"]:
+        loop = self._ensure_loop()
+        resources = self.resources
+
+        def _factory() -> "CameraAdapter":
+            fut = asyncio.run_coroutine_threadsafe(resources.get_camera(), loop)
+            return fut.result()
+
+        return _factory
+
+    def _shared_tripod_factory(self) -> Callable[[], TripodAdapter]:
+        loop = self._ensure_loop()
+        resources = self.resources
+
+        def _factory() -> TripodAdapter:
+            fut = asyncio.run_coroutine_threadsafe(resources.get_tripod(), loop)
+            return fut.result()
+
+        return _factory
 
     # ------------------------------------------------------------------
     # Shutdown lifecycle

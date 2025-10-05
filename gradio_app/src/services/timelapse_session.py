@@ -59,7 +59,13 @@ class TimelapseError(RuntimeError):
 class TimelapseSession:
     """High-level controller for a single timelapse capture session."""
 
-    def __init__(self, config: Dict[str, Any] | str | Path) -> None:
+    def __init__(
+        self,
+        config: Dict[str, Any] | str | Path,
+        *,
+        camera_factory: Optional[Callable[[], CameraAdapter]] = None,
+        tripod_factory: Optional[Callable[[], TripodAdapter]] = None,
+    ) -> None:
         logger.debug("Loading timelapse configuration from %s", config)
         self._cfg = self._load_config(config)
         self._validate_config(self._cfg)
@@ -67,6 +73,9 @@ class TimelapseSession:
 
         self.camera: Optional[CameraAdapter] = None
         self.tripod: Optional[TripodAdapter] = None
+
+        self._camera_factory = camera_factory
+        self._tripod_factory = tripod_factory
 
         self._metadata_csv: Optional[csv.DictWriter] = None
         self._metadata_file_handle: Optional[Any] = None
@@ -89,8 +98,12 @@ class TimelapseSession:
         logger.info("Preparing timelapse session")
 
         logger.info("Initialising camera and tripod adapters")
-        self.camera = self._init_camera(self._cfg["camera"])
-        self.tripod = self._init_tripod(self._cfg["tripod"])
+        self.camera = self._init_camera(
+            self._cfg["camera"], factory=self._camera_factory
+        )
+        self.tripod = self._init_tripod(
+            self._cfg["tripod"], factory=self._tripod_factory
+        )
         self._home_and_goto_start()
 
         logger.info(
@@ -316,18 +329,27 @@ class TimelapseSession:
         print(f"[timelapse] Video available at {self.video_path}.")
         return self.video_path
 
-    def _init_camera(self, cam_cfg: Dict[str, Any]) -> CameraAdapter:
+    def _init_camera(
+        self,
+        cam_cfg: Dict[str, Any],
+        *,
+        factory: Optional[Callable[[], CameraAdapter]] = None,
+    ) -> CameraAdapter:
         """Initialise :class:`CameraAdapter` and apply settings from *cam_cfg*."""
 
         cam_cfg = cam_cfg.copy()
         model_sub = cam_cfg.pop("model_substring", None)
         try:
-            if model_sub is not None:
+            if factory is not None:
+                camera = factory()
+            elif model_sub is not None:
                 camera = CameraAdapter.select_camera(model_sub)
             else:
                 camera = CameraAdapter.autodetect()
         except CameraAdapterError as exc:
             raise TimelapseError(f"Camera initialisation failed: {exc}") from exc
+        except Exception as exc:  # pragma: no cover - defensive guard
+            raise TimelapseError(f"Camera factory failed: {exc}") from exc
 
         if cam_cfg:
             logger.info("Applying %s camera settings", len(cam_cfg))
@@ -339,8 +361,21 @@ class TimelapseSession:
 
         return camera
 
-    def _init_tripod(self, tripod_cfg: Dict[str, Any]) -> TripodAdapter:
+    def _init_tripod(
+        self,
+        tripod_cfg: Dict[str, Any],
+        *,
+        factory: Optional[Callable[[], TripodAdapter]] = None,
+    ) -> TripodAdapter:
         """Initialise :class:`TripodAdapter` from configuration."""
+
+        if factory is not None:
+            try:
+                return factory()
+            except TripodAdapterError as exc:
+                raise TimelapseError(f"Tripod initialisation failed: {exc}") from exc
+            except Exception as exc:  # pragma: no cover - defensive guard
+                raise TimelapseError(f"Tripod factory failed: {exc}") from exc
 
         try:
             return TripodAdapter(tripod_cfg)

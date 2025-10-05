@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import AsyncIterator, Dict, Optional
+from typing import TYPE_CHECKING, AsyncIterator, Callable, Dict, Optional
 
 from logging_utils import ensure_trace_level
 from .timelapse_session import TimelapseError, TimelapseSession
 from models import RecordingSettings
+
+if TYPE_CHECKING:  # pragma: no cover - type checking helpers
+    from .camera_adapter import CameraAdapter
+    from .tripod_adapter import TripodAdapter
 
 ensure_trace_level()
 logger = logging.getLogger(__name__)
@@ -37,6 +41,12 @@ class TimelapseJob:
     progress: float = 0.0
     message: Optional[str] = None
     output_path: Optional[str] = None
+    camera_factory: Optional[Callable[[], "CameraAdapter"]] = field(
+        default=None, repr=False, compare=False
+    )
+    tripod_factory: Optional[Callable[[], "TripodAdapter"]] = field(
+        default=None, repr=False, compare=False
+    )
 
 
 _QUEUE_SENTINEL: object = object()
@@ -56,7 +66,11 @@ class TimelapseJobRunner:
         """Register *job*, spawn the session, and publish initial state."""
 
         logger.info("Starting timelapse job %s", job.job_id)
-        session = TimelapseSession(job.settings)
+        session = TimelapseSession(
+            job.settings,
+            camera_factory=job.camera_factory,
+            tripod_factory=job.tripod_factory,
+        )
         queue: asyncio.Queue[TimelapseJob | object] = asyncio.Queue()
         loop = asyncio.get_running_loop()
 
