@@ -8,7 +8,7 @@ from state import AppState
 import ui
 
 _SERVER_NAME = "0.0.0.0"
-_SERVER_PORT = 7860
+_SERVER_PORT = 8000
 
 
 async def _async_main() -> None:
