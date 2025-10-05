@@ -41,8 +41,8 @@ class TripodAdapter:
                 code="tripod_config_invalid",
             )
         self._serial_cfg = serial_cfg.copy()
-        self._serial_cfg["timeout"] = float(self._serial_cfg.get("timeout", 1.0))
-        self._serial_cfg["write_timeout"] = float(self._serial_cfg.get("write_timeout", 1.0))
+        self._serial_cfg["timeout"] = float(self._serial_cfg.get("timeout", 10.0))
+        self._serial_cfg["write_timeout"] = float(self._serial_cfg.get("write_timeout", 0.5))
         self._serial: Optional[serial.Serial] = None
         self._lock = RLock()
 

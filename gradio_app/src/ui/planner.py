@@ -119,6 +119,20 @@ def render_tab(
                 precision=0,
                 value=8,
             )
+        # Read/write timeout inputs help operators understand why long tripod moves
+        # keep the UI busy – larger values mean "wait this many seconds before
+        # declaring the controller unresponsive".
+        with gr.Row():
+            tripod_timeout = gr.Number(
+                label="Read Timeout (seconds)",
+                precision=2,
+                value=10.0,
+            )
+            tripod_write_timeout = gr.Number(
+                label="Write Timeout (seconds)",
+                precision=2,
+                value=0.5,
+            )
         with gr.Row():
             tripod_options = gr.Textbox(
                 label="Controller Options (JSON)",
@@ -175,6 +189,8 @@ def render_tab(
             camera_overrides,
             tripod_port,
             tripod_baud,
+            tripod_timeout,
+            tripod_write_timeout,
             tripod_microstep,
             tripod_options,
             tags_box,
@@ -241,6 +257,8 @@ def render_tab(
             camera_overrides,
             tripod_port,
             tripod_baud,
+            tripod_timeout,
+            tripod_write_timeout,
             tripod_microstep,
             tripod_options,
             tags_box,
@@ -328,6 +346,8 @@ async def _clone_preset(app_state_value: Any, request: Optional[Any]) -> Tuple[A
         _format_json(settings.camera.overrides),
         serial.port if serial else "",
         serial.baudrate if serial else 9600,
+        serial.timeout if serial and serial.timeout is not None else 10.0,
+        serial.write_timeout if serial and serial.write_timeout is not None else 0.5,
         settings.tripod.microstep,
         _format_json(settings.tripod.options),
         ", ".join(settings.tags),
@@ -342,8 +362,8 @@ async def _clone_preset(app_state_value: Any, request: Optional[Any]) -> Tuple[A
 
 
 def _empty_preset_payload(status: str) -> List[Any]:
-    # 25 component updates mirroring preset_outputs order.
-    empty_values: List[Any] = [gr.update() for _ in range(21)]
+    # 27 component updates mirroring preset_outputs order.
+    empty_values: List[Any] = [gr.update() for _ in range(23)]
     empty_values.append("")  # plan_summary
     empty_values.append(status)
     auto_default = default_plan_output_dir(None).as_posix()
@@ -398,6 +418,8 @@ async def _schedule_timelapse(
     camera_overrides: Optional[str],
     tripod_port: Optional[str],
     tripod_baud: Optional[float],
+    tripod_timeout: Optional[float],
+    tripod_write_timeout: Optional[float],
     tripod_microstep: Optional[float],
     tripod_options: Optional[str],
     tags: Optional[str],
@@ -424,6 +446,8 @@ async def _schedule_timelapse(
             camera_overrides,
             tripod_port,
             tripod_baud,
+            tripod_timeout,
+            tripod_write_timeout,
             tripod_microstep,
             tripod_options,
             tags,
@@ -494,6 +518,8 @@ def _build_recording_settings(
     camera_overrides: Optional[str],
     tripod_port: Optional[str],
     tripod_baud: Optional[float],
+    tripod_timeout: Optional[float],
+    tripod_write_timeout: Optional[float],
     tripod_microstep: Optional[float],
     tripod_options: Optional[str],
     tags: Optional[str],
@@ -523,6 +549,10 @@ def _build_recording_settings(
         serial_settings = TripodSerialSettings(
             port=tripod_port,
             baudrate=int(tripod_baud) if tripod_baud else 9600,
+            timeout=float(tripod_timeout) if tripod_timeout is not None else None,
+            write_timeout=(
+                float(tripod_write_timeout) if tripod_write_timeout is not None else None
+            ),
         )
 
     tripod = TripodSettings(

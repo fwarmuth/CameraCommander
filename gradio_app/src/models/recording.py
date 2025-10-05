@@ -58,6 +58,24 @@ class TripodSerialSettings(BaseModel):
 
     port: str = Field(..., description="Serial port path or identifier (e.g. /dev/ttyUSB0).")
     baudrate: int = Field(9600, description="Baud rate used for the serial link.")
+    # ``timeout`` controls how long we are willing to sit on ``readline`` waiting
+    # for the tripod firmware to acknowledge a command.  Bumping this to ten
+    # seconds by default gives the motors time to finish large moves before the
+    # adapter assumes the controller has hung.
+    timeout: Optional[float] = Field(
+        10.0,
+        ge=0.0,
+        description="Seconds to wait for controller responses (``None`` for blocking).",
+    )
+    # ``write_timeout`` determines how patient we are when pushing command bytes
+    # to the serial driver.  Half a second is enough for the very small command
+    # payloads we send, while still letting integrators relax it if their USB
+    # stack is unusually slow.
+    write_timeout: Optional[float] = Field(
+        0.5,
+        ge=0.0,
+        description="Seconds to wait for serial writes to complete (``None`` for blocking).",
+    )
 
 
 class TripodSettings(BaseModel):

@@ -18,7 +18,16 @@ _SERVER_PORT = 8000
 
 
 _DEFAULT_TRIPOD_SETTINGS = TripodSettings(
-    serial=TripodSerialSettings(port="/dev/ttyUSB0", baudrate=9600),
+    serial=TripodSerialSettings(
+        port="/dev/ttyUSB0",
+        baudrate=9600,
+        # Give the adapter plenty of time (10 s) to hear back from long-running
+        # moves before it assumes the firmware has hung.
+        timeout=10.0,
+        # Writes normally finish instantly, so we only budget half a second
+        # before declaring the port wedged.
+        write_timeout=0.5,
+    ),
     microstep=16,
 )
 
