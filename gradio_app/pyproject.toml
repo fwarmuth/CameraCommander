@@ -10,7 +10,7 @@ name = "cameracommander"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     # Typer provides the CLI and depends on Click internally.
     "typer>=0.12.0",
