@@ -7,6 +7,7 @@ import json
 import logging
 import uuid
 from datetime import timedelta
+from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
 import gradio as gr
@@ -21,6 +22,7 @@ from models import (
 )
 from services.timelapse_runner import TimelapseJob
 from state import AppState
+from .paths import default_plan_output_dir
 from .utils import hardware_access_blocked_message, log_button_click, unwrap_app_state
 
 logger = logging.getLogger(__name__)
@@ -37,6 +39,10 @@ def render_tab(
         active_job_state = gr.State(value=None)
     if clone_request_state is None:
         clone_request_state = gr.State(value=None)
+
+    initial_auto_output = default_plan_output_dir(None)
+    auto_output_dir_state = gr.State(value=initial_auto_output.as_posix())
+    output_dir_custom_state = gr.State(value=False)
 
     with gr.Blocks() as tab:
         gr.Markdown("## Timelapse Planner")
@@ -83,6 +89,7 @@ def render_tab(
             output_dir = gr.Textbox(
                 label="Output Directory",
                 placeholder="/data/timelapse_runs/sunset",  # noqa: E501
+                value=initial_auto_output.as_posix(),
             )
         with gr.Row():
             render_video = gr.Checkbox(label="Render Video", value=True)
@@ -174,6 +181,8 @@ def render_tab(
             notes_box,
             plan_summary,
             status_message,
+            auto_output_dir_state,
+            output_dir_custom_state,
         ]
 
         apply_preset.click(
@@ -193,6 +202,18 @@ def render_tab(
         )
 
         # Inter-field behaviour ---------------------------------------------
+        plan_name.change(
+            _sync_output_dir_with_plan,
+            inputs=[plan_name, auto_output_dir_state, output_dir_custom_state],
+            outputs=[output_dir, auto_output_dir_state],
+        )
+
+        output_dir.change(
+            _track_output_dir_customisation,
+            inputs=[output_dir, auto_output_dir_state],
+            outputs=[output_dir_custom_state],
+        )
+
         render_video.change(
             _toggle_video_options,
             inputs=[render_video],
@@ -283,7 +304,11 @@ async def _clone_preset(app_state_value: Any, request: Optional[Any]) -> Tuple[A
     plan = settings.plan
     serial = settings.tripod.serial
 
-    plan_summary = _summarise_plan(plan)
+    auto_default = default_plan_output_dir(plan.name).as_posix()
+    plan_output = (plan.output_dir or "").strip() or auto_default
+    plan_summary = _summarise_plan(plan.copy(update={"output_dir": plan_output}))
+    auto_state_value = auto_default
+    custom_state_value = plan_output != auto_default
 
     payload: List[Any] = [
         plan.name or "",
@@ -295,7 +320,7 @@ async def _clone_preset(app_state_value: Any, request: Optional[Any]) -> Tuple[A
         float(plan.start.tilt),
         float(plan.target.pan),
         float(plan.target.tilt),
-        plan.output_dir,
+        plan_output,
         plan.render_video,
         plan.video_fps or 30,
         plan.ffmpeg_extra or "",
@@ -309,16 +334,21 @@ async def _clone_preset(app_state_value: Any, request: Optional[Any]) -> Tuple[A
         settings.notes or "",
         plan_summary,
         f"Cloned settings from session {session_id}.",
+        auto_state_value,
+        custom_state_value,
     ]
 
     return tuple(payload)
 
 
 def _empty_preset_payload(status: str) -> List[Any]:
-    # 23 component updates mirroring preset_outputs order.
+    # 25 component updates mirroring preset_outputs order.
     empty_values: List[Any] = [gr.update() for _ in range(21)]
     empty_values.append("")  # plan_summary
     empty_values.append(status)
+    auto_default = default_plan_output_dir(None).as_posix()
+    empty_values.append(auto_default)
+    empty_values.append(False)
     return empty_values
 
 
@@ -475,8 +505,13 @@ def _build_recording_settings(
         raise ValueError("Interval must be positive.")
     if settle_time_s is None or settle_time_s < 0:
         raise ValueError("Settle time cannot be negative.")
-    if output_dir is None or not output_dir.strip():
-        raise ValueError("Output directory is required.")
+    fallback_slug = None
+    if output_dir and output_dir.strip():
+        fallback_slug = Path(output_dir.strip()).name
+    auto_output_dir = default_plan_output_dir(plan_name, fallback_slug=fallback_slug)
+    resolved_output_dir = (
+        output_dir.strip() if output_dir and output_dir.strip() else auto_output_dir.as_posix()
+    )
 
     camera = CameraSettings(
         model_substring=camera_model or None,
@@ -504,7 +539,7 @@ def _build_recording_settings(
         settle_time_s=float(settle_time_s),
         start={"pan": float(start_pan or 0.0), "tilt": float(start_tilt or 0.0)},
         target={"pan": float(target_pan or 0.0), "tilt": float(target_tilt or 0.0)},
-        output_dir=output_dir.strip(),
+        output_dir=resolved_output_dir,
         render_video=bool(render_video),
         video_fps=int(video_fps) if render_video and video_fps else None,
         ffmpeg_extra=(ffmpeg_extra or None),
@@ -541,6 +576,33 @@ def _parse_tags(raw: Optional[str]) -> List[str]:
         return []
     parts = [item.strip() for item in raw.replace("\n", ",").split(",")]
     return [item for item in parts if item]
+
+
+def _sync_output_dir_with_plan(
+    plan_name: Optional[str],
+    auto_output_dir: Optional[str],
+    is_custom: bool,
+) -> Tuple[Any, str]:
+    fallback_slug = None
+    if auto_output_dir:
+        fallback_slug = Path(auto_output_dir).name
+    new_auto_output = default_plan_output_dir(plan_name, fallback_slug=fallback_slug).as_posix()
+    if is_custom:
+        return (gr.update(), new_auto_output)
+    return (gr.update(value=new_auto_output), new_auto_output)
+
+
+def _track_output_dir_customisation(
+    current_value: Optional[str],
+    auto_output_dir: Optional[str],
+) -> bool:
+    current = (current_value or "").strip()
+    auto = (auto_output_dir or "").strip()
+    if not current:
+        return False
+    if not auto:
+        return False
+    return current != auto
 
 
 def _toggle_video_options(render_video: bool) -> Any:
