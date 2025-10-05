@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import functools
 import logging
+from io import BytesIO
 from typing import Dict, Iterable, List, Tuple
 
 import gradio as gr
+from PIL import Image, UnidentifiedImageError
 
 from state import AppState
 from services import TripodAdapterError
@@ -184,10 +186,17 @@ async def _start_live_view(
             return True, gr.update(), "Live view is already running."
 
         try:
-            frame = await app_state.resources.capture_preview()
+            frame_bytes = await app_state.resources.capture_preview()
         except Exception as exc:  # pragma: no cover - relies on hardware
             message = format_hardware_error("Live view unavailable", exc)
             return False, gr.update(value=None), message
+
+    try:
+        frame = _decode_preview_image(frame_bytes)
+    except ValueError as exc:
+        logger.warning("Failed decoding live preview image: %s", exc, exc_info=exc)
+        message = format_hardware_error("Live view unavailable", exc)
+        return False, gr.update(value=None), message
 
     return True, gr.update(value=frame), "Live view started."
 
@@ -211,12 +220,30 @@ async def _refresh_live_view(
         if await app_state.jobs.has_active_job():
             return gr.update(), False, hardware_access_blocked_message()
         try:
-            frame = await app_state.resources.capture_preview()
+            frame_bytes = await app_state.resources.capture_preview()
         except Exception as exc:  # pragma: no cover - relies on hardware
             message = format_hardware_error("Live view failed", exc)
             return gr.update(value=None), False, message
 
+    try:
+        frame = _decode_preview_image(frame_bytes)
+    except ValueError as exc:
+        logger.warning("Failed decoding live preview image: %s", exc, exc_info=exc)
+        message = format_hardware_error("Live view failed", exc)
+        return gr.update(value=None), False, message
+
     return gr.update(value=frame), True, gr.update()
+
+
+def _decode_preview_image(payload: bytes) -> Image.Image:
+    """Convert raw preview bytes into a Pillow image for Gradio rendering."""
+    try:
+        with Image.open(BytesIO(payload)) as img:
+            if img.mode not in {"RGB", "RGBA"}:
+                img = img.convert("RGB")
+            return img.copy()
+    except (UnidentifiedImageError, OSError) as exc:
+        raise ValueError("Preview payload is not a recognised image") from exc
 
 
 async def _nudge_focus(
