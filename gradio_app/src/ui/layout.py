@@ -5,7 +5,7 @@ from __future__ import annotations
 import gradio as gr
 
 from state import AppState, AppStateHandle
-from . import library, live_control, planner, session_monitor
+from . import live_control, planner, session_monitor
 
 
 def build_application(app_state: AppState) -> gr.Blocks:
@@ -17,16 +17,13 @@ def build_application(app_state: AppState) -> gr.Blocks:
     with gr.Blocks(title="CameraCommander") as demo:
         shared_state = gr.State(AppStateHandle(app_state))
         active_job_state = gr.State(value=None)
-        planner_clone_state = gr.State(value=None)
 
         gr.Markdown("# CameraCommander Gradio Application (Work in Progress)")
         with gr.Tabs():
             with gr.Tab("Live Control"):
                 live_control.render_tab(shared_state)
             with gr.Tab("Timelapse Planner"):
-                planner.render_tab(shared_state, active_job_state, planner_clone_state)
+                planner.render_tab(shared_state)
             with gr.Tab("Active Session"):
                 session_monitor.render_tab(shared_state, active_job_state)
-            with gr.Tab("Library"):
-                library.render_tab(shared_state, planner_clone_state)
     return demo

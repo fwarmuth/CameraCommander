@@ -1,12 +1,11 @@
-"""Timelapse planner UI wired to the async job runner."""
+"""Timelapse planner UI for authoring reusable schedules."""
 
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
-import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
@@ -20,23 +19,20 @@ from models import (
     TripodSerialSettings,
     TripodSettings,
 )
-from services.timelapse_runner import TimelapseJob
 from state import AppState
+from store.schedule_repository import StoredSchedule
 from .paths import default_plan_output_dir
-from .utils import hardware_access_blocked_message, log_button_click, unwrap_app_state
+from .utils import log_button_click, unwrap_app_state
 
 logger = logging.getLogger(__name__)
 
 
 def render_tab(
     shared_app_state: gr.State,
-    active_job_state: Optional[gr.State] = None,
     clone_request_state: Optional[gr.State] = None,
 ) -> gr.Blocks:
     """Render the Timelapse Planner tab contents."""
 
-    if active_job_state is None:
-        active_job_state = gr.State(value=None)
     if clone_request_state is None:
         clone_request_state = gr.State(value=None)
 
@@ -59,12 +55,26 @@ def render_tab(
                 )
                 refresh_presets = gr.Button("Refresh Presets", variant="secondary")
                 apply_preset = gr.Button("Clone Selected Preset", variant="secondary")
+
+                gr.Markdown("### Saved Schedules")
+                saved_schedule_dropdown = gr.Dropdown(
+                    label="Load Saved Schedule",
+                    choices=[],
+                    value=None,
+                    allow_custom_value=False,
+                )
+                refresh_saved_schedules = gr.Button(
+                    "Refresh Saved Schedules", variant="secondary"
+                )
+                load_saved_schedule = gr.Button(
+                    "Load Selected Schedule", variant="secondary"
+                )
             with gr.Column():
-                gr.Markdown("### Job Overview")
-                job_id_display = gr.Textbox(
-                    label="Current Job ID",
+                gr.Markdown("### Schedule Overview")
+                schedule_id_display = gr.Textbox(
+                    label="Active Schedule ID",
                     interactive=False,
-                    placeholder="No active job",
+                    placeholder="No loaded schedules",
                 )
                 plan_summary = gr.Markdown("", elem_classes=["plan-summary"])
 
@@ -138,8 +148,7 @@ def render_tab(
                 lines=2,
             )
 
-        submit_button = gr.Button("Schedule Timelapse", variant="primary")
-        lock_banner = gr.Markdown("", elem_classes=["lock-banner"])
+        save_button = gr.Button("Save Timelapse Schedule", variant="primary")
 
         # Preset helpers -----------------------------------------------------
         tab.load(
@@ -157,7 +166,7 @@ def render_tab(
             outputs=[preset_dropdown],
         )
 
-        preset_outputs: List[gr.components.Component] = [
+        form_components: List[gr.components.Component] = [
             plan_name,
             plan_description,
             total_frames,
@@ -179,8 +188,13 @@ def render_tab(
             tripod_options,
             tags_box,
             notes_box,
+        ]
+
+        preset_outputs: List[gr.components.Component] = [
+            *form_components,
             plan_summary,
             status_message,
+            schedule_id_display,
             auto_output_dir_state,
             output_dir_custom_state,
         ]
@@ -198,6 +212,35 @@ def render_tab(
         clone_request_state.change(
             _clone_preset,
             inputs=[shared_app_state, clone_request_state],
+            outputs=preset_outputs,
+        )
+
+        tab.load(
+            _load_saved_schedule_choices,
+            inputs=[shared_app_state],
+            outputs=[saved_schedule_dropdown],
+        )
+        tab.load(
+            _observe_saved_schedule_updates,
+            inputs=[shared_app_state],
+            outputs=[saved_schedule_dropdown],
+        )
+        refresh_saved_schedules.click(
+            log_button_click(
+                "Refresh Saved Schedules",
+                _load_saved_schedule_choices,
+                logger=logger,
+            ),
+            inputs=[shared_app_state],
+            outputs=[saved_schedule_dropdown],
+        )
+        load_saved_schedule.click(
+            log_button_click(
+                "Load Selected Schedule",
+                _load_saved_schedule,
+                logger=logger,
+            ),
+            inputs=[shared_app_state, saved_schedule_dropdown],
             outputs=preset_outputs,
         )
 
@@ -223,7 +266,6 @@ def render_tab(
         # Job submission -----------------------------------------------------
         submission_inputs: List[gr.components.Component] = [
             shared_app_state,
-            active_job_state,
             plan_name,
             plan_description,
             total_frames,
@@ -247,20 +289,14 @@ def render_tab(
             notes_box,
         ]
 
-        submit_button.click(
+        save_button.click(
             log_button_click(
-                "Schedule Timelapse",
-                _schedule_timelapse,
+                "Save Timelapse Schedule",
+                _save_schedule,
                 logger=logger,
             ),
             inputs=submission_inputs,
-            outputs=[status_message, active_job_state, job_id_display, plan_summary],
-        )
-
-        tab.load(
-            _observe_hardware_lock,
-            inputs=[shared_app_state],
-            outputs=[submit_button, lock_banner],
+            outputs=[status_message, schedule_id_display, plan_summary],
         )
 
     return tab
@@ -279,6 +315,26 @@ async def _load_preset_choices(app_state_value: Any) -> Any:
         choices.append((display, session.summary.session_id))
 
     return gr.update(choices=choices, value=None)
+
+
+async def _load_saved_schedule_choices(app_state_value: Any) -> Any:
+    app_state = unwrap_app_state(app_state_value)
+    with AppState.use(app_state):
+        schedules = await asyncio.to_thread(app_state.schedules.list_schedules)
+
+    choices = [_format_saved_schedule_label(entry) for entry in schedules]
+    return gr.update(choices=choices, value=None)
+
+
+async def _observe_saved_schedule_updates(
+    app_state_value: Any,
+) -> AsyncIterator[Any]:
+    app_state = unwrap_app_state(app_state_value)
+    with AppState.use(app_state):
+        async for _ in app_state.subscribe_schedules():
+            schedules = await asyncio.to_thread(app_state.schedules.list_schedules)
+            choices = [_format_saved_schedule_label(entry) for entry in schedules]
+            yield gr.update(choices=choices)
 
 
 async def _clone_preset(app_state_value: Any, request: Optional[Any]) -> Tuple[Any, ...]:
@@ -301,14 +357,39 @@ async def _clone_preset(app_state_value: Any, request: Optional[Any]) -> Tuple[A
     settings = stored.settings
     with AppState.use(app_state):
         app_state.set_tripod_settings(settings.tripod)
+
+    return _settings_to_form_payload(
+        settings,
+        f"Cloned settings from session {session_id}.",
+        schedule_id=None,
+    )
+
+
+def _empty_preset_payload(status: str) -> List[Any]:
+    # Matches the ordering defined in ``preset_outputs``.
+    empty_values: List[Any] = [gr.update() for _ in range(21)]
+    empty_values.append("")  # plan_summary
+    empty_values.append(status)
+    empty_values.append("")  # schedule_id_display
+    auto_default = default_plan_output_dir(None).as_posix()
+    empty_values.append(auto_default)  # auto_output_dir_state
+    empty_values.append(False)  # output_dir_custom_state
+    return empty_values
+
+
+def _settings_to_form_payload(
+    settings: RecordingSettings,
+    status: str,
+    *,
+    schedule_id: Optional[str],
+) -> Tuple[Any, ...]:
     plan = settings.plan
     serial = settings.tripod.serial
 
     auto_default = default_plan_output_dir(plan.name).as_posix()
     plan_output = (plan.output_dir or "").strip() or auto_default
-    plan_summary = _summarise_plan(plan.copy(update={"output_dir": plan_output}))
-    auto_state_value = auto_default
-    custom_state_value = plan_output != auto_default
+    summary = _summarise_plan(plan.copy(update={"output_dir": plan_output}))
+    custom_state = plan_output != auto_default
 
     payload: List[Any] = [
         plan.name or "",
@@ -321,7 +402,7 @@ async def _clone_preset(app_state_value: Any, request: Optional[Any]) -> Tuple[A
         float(plan.target.pan),
         float(plan.target.tilt),
         plan_output,
-        plan.render_video,
+        bool(plan.render_video),
         plan.video_fps or 30,
         plan.ffmpeg_extra or "",
         settings.camera.model_substring or "",
@@ -332,24 +413,41 @@ async def _clone_preset(app_state_value: Any, request: Optional[Any]) -> Tuple[A
         _format_json(settings.tripod.options),
         ", ".join(settings.tags),
         settings.notes or "",
-        plan_summary,
-        f"Cloned settings from session {session_id}.",
-        auto_state_value,
-        custom_state_value,
+        summary,
+        status,
+        schedule_id or "",
+        auto_default,
+        custom_state,
     ]
 
     return tuple(payload)
 
 
-def _empty_preset_payload(status: str) -> List[Any]:
-    # 25 component updates mirroring preset_outputs order.
-    empty_values: List[Any] = [gr.update() for _ in range(21)]
-    empty_values.append("")  # plan_summary
-    empty_values.append(status)
-    auto_default = default_plan_output_dir(None).as_posix()
-    empty_values.append(auto_default)
-    empty_values.append(False)
-    return empty_values
+async def _load_saved_schedule(
+    app_state_value: Any,
+    schedule_id: Optional[str],
+) -> Tuple[Any, ...]:
+    if not schedule_id:
+        status = "Select a saved schedule to load."
+        return (*_empty_preset_payload(status),)
+
+    app_state = unwrap_app_state(app_state_value)
+    with AppState.use(app_state):
+        stored = await asyncio.to_thread(app_state.schedules.get_schedule, schedule_id)
+
+    if stored is None:
+        status = f"Schedule `{schedule_id}` could not be found."
+        return (*_empty_preset_payload(status),)
+
+    settings = stored.settings
+    with AppState.use(app_state):
+        app_state.set_tripod_settings(settings.tripod)
+
+    return _settings_to_form_payload(
+        settings,
+        f"Loaded schedule `{schedule_id}`.",
+        schedule_id=schedule_id,
+    )
 
 
 def _resolve_session_id(request: Optional[Any]) -> Optional[str]:
@@ -362,25 +460,8 @@ def _resolve_session_id(request: Optional[Any]) -> Optional[str]:
     return None
 
 
-async def _observe_hardware_lock(app_state_value: Any) -> AsyncIterator[Tuple[Any, Any]]:
-    app_state = unwrap_app_state(app_state_value)
-    with AppState.use(app_state):
-        async for locked in app_state.subscribe_hardware_lock():
-            if locked:
-                yield (
-                    gr.update(interactive=False),
-                    gr.update(value=hardware_access_blocked_message()),
-                )
-            else:
-                yield (
-                    gr.update(interactive=True),
-                    gr.update(value=""),
-                )
-
-
-async def _schedule_timelapse(
+async def _save_schedule(
     app_state_value: Any,
-    current_job_id: Optional[str],
     plan_name: Optional[str],
     plan_description: Optional[str],
     total_frames: Optional[float],
@@ -402,7 +483,7 @@ async def _schedule_timelapse(
     tripod_options: Optional[str],
     tags: Optional[str],
     notes: Optional[str],
-) -> Tuple[Any, Optional[str], Any, Any]:
+) -> Tuple[Any, Any, Any]:
     app_state = unwrap_app_state(app_state_value)
 
     try:
@@ -432,46 +513,25 @@ async def _schedule_timelapse(
     except ValidationError as exc:
         return (
             gr.update(value=f"❌ Validation failed:\n````\n{exc}\n````"),
-            current_job_id,
-            gr.update(),
+            gr.update(value=""),
             gr.update(value=""),
         )
     except ValueError as exc:
         return (
             gr.update(value=f"❌ {exc}"),
-            current_job_id,
-            gr.update(),
+            gr.update(value=""),
             gr.update(value=""),
         )
 
     with AppState.use(app_state):
-        if await app_state.jobs.has_active_job():
-            return (
-                gr.update(
-                    value="⚠️ Cannot schedule a new job while another session is active."
-                ),
-                current_job_id,
-                gr.update(),
-                gr.update(value=_summarise_plan(settings.plan)),
-            )
-
         app_state.set_tripod_settings(settings.tripod)
+        stored = await asyncio.to_thread(app_state.schedules.save_schedule, settings)
 
-        job_id = uuid.uuid4().hex
-        settings = settings.copy(update={"session_id": job_id})
-        job = TimelapseJob(
-            job_id=job_id,
-            settings=settings.to_session_config(),
-            recording=settings,
-        )
-        await app_state.start_job(job)
-
-    message = _success_message(settings.plan, job_id)
-    summary = _summarise_plan(settings.plan)
+    summary = _summarise_plan(stored.settings.plan)
+    message = _schedule_saved_message(stored.schedule_id, stored.path)
     return (
         gr.update(value=message),
-        job_id,
-        gr.update(value=job_id),
+        gr.update(value=stored.schedule_id),
         gr.update(value=summary),
     )
 
@@ -615,6 +675,26 @@ def _format_json(payload: Dict[str, Any]) -> str:
     return json.dumps(payload, indent=2, sort_keys=True)
 
 
+def _format_saved_schedule_label(entry: StoredSchedule) -> Tuple[str, str]:
+    plan_name = entry.settings.plan.name or "Untitled"
+    timestamp = _format_schedule_timestamp(entry.settings.created_at)
+    label = f"{plan_name} — {timestamp} ({entry.schedule_id})"
+    return label, entry.schedule_id
+
+
+def _format_schedule_timestamp(value: object) -> str:
+    if isinstance(value, datetime):
+        try:
+            return value.astimezone().strftime("%Y-%m-%d %H:%M")
+        except ValueError:
+            return value.strftime("%Y-%m-%d %H:%M")
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except ValueError:
+        return str(value)
+    return parsed.strftime("%Y-%m-%d %H:%M")
+
+
 def _summarise_plan(plan: TimelapsePlan) -> str:
     duration = timedelta(seconds=plan.duration_seconds)
     hours, remainder = divmod(duration.total_seconds(), 3600)
@@ -634,10 +714,8 @@ def _summarise_plan(plan: TimelapsePlan) -> str:
     )
 
 
-def _success_message(plan: TimelapsePlan, job_id: str) -> str:
-    name = plan.name or "Untitled plan"
-    duration_min = plan.duration_seconds / 60.0
+def _schedule_saved_message(schedule_id: str, path: Path) -> str:
     return (
-        f"✅ Scheduled **{name}** as job `{job_id}`."
-        f" Estimated capture time ≈ {duration_min:.1f} minutes."
+        f"✅ Saved schedule `{schedule_id}`."
+        f" Stored at `{path}`."
     )

@@ -20,7 +20,7 @@ from models import TripodSettings
 from services import AsyncResourceManager, TimelapseJobRunner, TripodAdapter
 from services.resources import tripod_adapter_from_settings
 from services.timelapse_runner import TimelapseJob, TimelapseJobStatus
-from store.session_repository import SessionRepository
+from store import ScheduleRepository, SessionRepository
 
 if TYPE_CHECKING:  # pragma: no cover - import for type checking only
     from services import CameraAdapter
@@ -28,6 +28,7 @@ if TYPE_CHECKING:  # pragma: no cover - import for type checking only
 _APP_STATE: ContextVar["AppState"] = ContextVar("app_state")
 _JOB_STREAM_SENTINEL = object()
 _SESSION_STREAM_SENTINEL = object()
+_SCHEDULE_STREAM_SENTINEL = object()
 
 
 ensure_trace_level()
@@ -43,6 +44,7 @@ class AppState:
     resources: AsyncResourceManager = field(default_factory=AsyncResourceManager)
     jobs: TimelapseJobRunner = field(default_factory=TimelapseJobRunner)
     sessions: SessionRepository = field(default_factory=SessionRepository)
+    schedules: ScheduleRepository = field(default_factory=ScheduleRepository)
     tripod_settings: Optional[TripodSettings] = field(default=None)
 
     library_selected_session: Optional[str] = field(default=None, init=False)
@@ -63,6 +65,13 @@ class AppState:
     _session_repo_listener: Optional[Callable[[], None]] = field(
         default=None, init=False, repr=False
     )
+    _schedule_listeners: Set[asyncio.Queue[int | object]] = field(
+        default_factory=set, init=False
+    )
+    _schedule_version: int = field(default=0, init=False)
+    _schedule_repo_listener: Optional[Callable[[], None]] = field(
+        default=None, init=False, repr=False
+    )
     _loop: Optional[asyncio.AbstractEventLoop] = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -74,6 +83,10 @@ class AppState:
         listener = self._on_session_repository_changed
         self.sessions.add_change_listener(listener)
         self._session_repo_listener = listener
+
+        schedule_listener = self._on_schedule_repository_changed
+        self.schedules.add_change_listener(schedule_listener)
+        self._schedule_repo_listener = schedule_listener
 
         if self.tripod_settings is not None:
             self.set_tripod_settings(self.tripod_settings)
@@ -204,6 +217,25 @@ class AppState:
             async with self._lock:
                 self._session_listeners.discard(queue)
 
+    async def subscribe_schedules(self) -> AsyncIterator[int]:
+        """Yield version counters whenever the schedule repository changes."""
+
+        queue: asyncio.Queue[int | object] = asyncio.Queue()
+
+        async with self._lock:
+            self._schedule_listeners.add(queue)
+
+        try:
+            while True:
+                update = await queue.get()
+                if update is _SCHEDULE_STREAM_SENTINEL:
+                    break
+                if isinstance(update, int):
+                    yield update
+        finally:
+            async with self._lock:
+                self._schedule_listeners.discard(queue)
+
     async def _dispatch_job_update(self, job: TimelapseJob) -> None:
         async with self._lock:
             listeners: Iterable[asyncio.Queue[TimelapseJob | object]] = tuple(
@@ -259,6 +291,22 @@ class AppState:
 
         for queue in listeners:
             queue.put_nowait(self._session_version)
+
+    def _on_schedule_repository_changed(self) -> None:
+        loop = self._loop
+        if loop is None or loop.is_closed():  # pragma: no cover - defensive guard
+            return
+        loop.call_soon_threadsafe(self._notify_schedule_change)
+
+    def _notify_schedule_change(self) -> None:
+        self._schedule_version += 1
+        logger.debug("Schedule repository changed -> version %s", self._schedule_version)
+
+        listeners: Iterable[asyncio.Queue[int | object]]
+        listeners = tuple(self._schedule_listeners)
+
+        for queue in listeners:
+            queue.put_nowait(self._schedule_version)
 
     async def _remove_job_listener(
         self, job_id: str, queue: asyncio.Queue[TimelapseJob | object]
@@ -373,6 +421,9 @@ class AppState:
         if self._session_repo_listener is not None:
             self.sessions.remove_change_listener(self._session_repo_listener)
             self._session_repo_listener = None
+        if self._schedule_repo_listener is not None:
+            self.schedules.remove_change_listener(self._schedule_repo_listener)
+            self._schedule_repo_listener = None
 
         # Cancel any observer tasks that may still be running.
         for task in list(self._background_tasks):
@@ -393,6 +444,8 @@ class AppState:
             self._hardware_lock_listeners.clear()
             session_listeners = tuple(self._session_listeners)
             self._session_listeners.clear()
+            schedule_listeners = tuple(self._schedule_listeners)
+            self._schedule_listeners.clear()
 
         for queue in listeners:
             queue.put_nowait(_JOB_STREAM_SENTINEL)
@@ -402,6 +455,9 @@ class AppState:
 
         for queue in session_listeners:
             queue.put_nowait(_SESSION_STREAM_SENTINEL)
+
+        for queue in schedule_listeners:
+            queue.put_nowait(_SCHEDULE_STREAM_SENTINEL)
 
         await self.jobs.shutdown()
         await self.resources.shutdown()
