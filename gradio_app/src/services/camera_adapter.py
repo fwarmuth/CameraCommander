@@ -63,6 +63,15 @@ TYPE_NAMES = {
 }
 
 
+# Known exposure-related config paths surfaced in the live control UI.
+EXPOSURE_SETTING_KEYS = (
+    "main.imgsettings.iso",
+    "main.capturesettings.aperture",
+    "main.capturesettings.shutterspeed",
+    "main.imgsettings.whitebalance",
+)
+
+
 def flatten_widget(widget: gp.CameraWidget, prefix: str = "") -> Dict[str, gp.CameraWidget]:
     mapping: Dict[str, gp.CameraWidget] = {}
     name = widget.get_name()
@@ -74,7 +83,60 @@ def flatten_widget(widget: gp.CameraWidget, prefix: str = "") -> Dict[str, gp.Ca
 
 
 def choices(widget: gp.CameraWidget) -> List[str]:
-    return [widget.get_choice(i) for i in range(widget.count_choices())]
+    return _safe_widget_choices(widget)
+
+
+def _safe_widget_value(widget: gp.CameraWidget) -> Optional[str]:
+    try:
+        raw = widget.get_value()
+    except gp.GPhoto2Error:
+        return None
+    if raw is None:
+        return None
+    if isinstance(raw, bytes):
+        try:
+            return raw.decode(errors="ignore")
+        except Exception:
+            return None
+    return str(raw)
+
+
+def _safe_widget_choices(widget: gp.CameraWidget) -> List[str]:
+    try:
+        count = widget.count_choices()
+    except gp.GPhoto2Error:
+        return []
+    options: List[str] = []
+    for idx in range(count):
+        try:
+            choice = widget.get_choice(idx)
+        except gp.GPhoto2Error:
+            continue
+        if isinstance(choice, bytes):
+            try:
+                choice = choice.decode(errors="ignore")
+            except Exception:
+                continue
+        options.append(str(choice))
+    return options
+
+
+def _range_to_choices(widget: gp.CameraWidget) -> List[str]:
+    try:
+        vmin, vmax, step = widget.get_range()
+    except gp.GPhoto2Error:
+        return []
+    if step <= 0:
+        return []
+    count = int(round((vmax - vmin) / step)) + 1
+    values: List[str] = []
+    for index in range(max(count, 0)):
+        raw = vmin + index * step
+        if float(raw).is_integer():
+            values.append(str(int(raw)))
+        else:
+            values.append(f"{raw:g}")
+    return values
 
 
 _BOOL_TRUE = {"1", "true", "on", "yes", "enabled"}
@@ -346,6 +408,35 @@ class CameraAdapter:
         if self._camera is None:
             raise CameraAdapterError("Camera connection is closed.", code="camera_not_ready")
         return gp.check_result(gp.gp_camera_get_config(self._camera, self._context))
+
+    def get_setting_options(self, setting_keys: Iterable[str]) -> Dict[str, Dict[str, Any]]:
+        def _inner() -> Dict[str, Dict[str, Any]]:
+            root = self._get_config_root()
+            flattened = flatten_widget(root)
+            payload: Dict[str, Dict[str, Any]] = {}
+            for key in setting_keys:
+                widget = flattened.get(key)
+                if widget is None:
+                    continue
+                wtype = widget.get_type()
+                entry: Dict[str, Any] = {
+                    "type": TYPE_NAMES.get(wtype, "UNKNOWN"),
+                    "current": _safe_widget_value(widget),
+                    "choices": [],
+                }
+                if wtype in (gp.GP_WIDGET_MENU, gp.GP_WIDGET_RADIO):
+                    entry["choices"] = _safe_widget_choices(widget)
+                elif wtype == gp.GP_WIDGET_TOGGLE:
+                    entry["choices"] = ["On", "Off"]
+                elif wtype == gp.GP_WIDGET_RANGE:
+                    entry["choices"] = _range_to_choices(widget)
+                payload[key] = entry
+            return payload
+
+        return self._with_reconnect(_inner)
+
+    def get_exposure_options(self) -> Dict[str, Dict[str, Any]]:
+        return self.get_setting_options(EXPOSURE_SETTING_KEYS)
 
     def query_settings(self) -> Dict[str, Dict[str, Any]]:
         def _inner() -> Dict[str, Dict[str, Any]]:

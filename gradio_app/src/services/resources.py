@@ -117,6 +117,9 @@ class AsyncResourceManager:
         method_name = "query_settings" if include_metadata else "get_current_settings"
         return await self._call_camera(method_name)
 
+    async def camera_exposure_settings(self) -> Dict[str, Any]:
+        return await self._call_camera("get_exposure_options")
+
     async def update_camera_settings(self, new_settings: Dict[str, Any], *, step_policy: str = "strict") -> None:
         await self._call_camera("apply_settings", new_settings, step_policy=step_policy)
 

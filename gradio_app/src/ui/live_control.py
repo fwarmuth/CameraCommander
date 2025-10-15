@@ -5,7 +5,7 @@ from __future__ import annotations
 import functools
 import logging
 from io import BytesIO
-from typing import Dict, Iterable, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 import gradio as gr
 import numpy as np
@@ -39,8 +39,8 @@ _TRIPOD_CONFIG_PROMPT = (
     "Tripod controls are unavailable until defaults are configured in the Timelapse Planner tab."
 )
 _CAMERA_SETTING_FIELDS: List[Tuple[str, str]] = [
-    ("main.capturesettings.iso", "ISO"),
-    ("main.capturesettings.f-number", "Aperture"),
+    ("main.imgsettings.iso", "ISO"),
+    ("main.capturesettings.aperture", "Aperture"),
     ("main.capturesettings.shutterspeed", "Shutter Speed"),
     ("main.imgsettings.whitebalance", "White Balance"),
 ]
@@ -296,6 +296,7 @@ async def _nudge_focus(
 async def _load_camera_settings(app_state_value: AppState) -> Tuple[object, ...]:
     app_state = unwrap_app_state(app_state_value)
     updates: List[object] = []
+    capabilities: Dict[str, Any] = {}
 
     with AppState.use(app_state):
         if await app_state.jobs.has_active_job():
@@ -304,9 +305,7 @@ async def _load_camera_settings(app_state_value: AppState) -> Tuple[object, ...]
             updates.append(hardware_access_blocked_message())
             return tuple(updates)
         try:
-            snapshot = await app_state.resources.camera_settings_snapshot(
-                include_metadata=True
-            )
+            capabilities = await app_state.resources.camera_exposure_settings()
         except Exception as exc:  # pragma: no cover - relies on hardware
             message = format_hardware_error("Failed loading camera settings", exc)
             for _ in _CAMERA_SETTING_FIELDS:
@@ -315,17 +314,20 @@ async def _load_camera_settings(app_state_value: AppState) -> Tuple[object, ...]
             return tuple(updates)
 
     for key, _ in _CAMERA_SETTING_FIELDS:
-        details = snapshot.get(key)
-        if not details:
-            updates.append(gr.update(choices=[], value=None, interactive=False))
-            continue
-        choices: Iterable[str] = details.get("choices") or []
-        current = details.get("current")
+        details = capabilities.get(key) if isinstance(capabilities, dict) else None
+        raw_choices = []
+        current = None
+        if isinstance(details, dict):
+            raw_choices = list(details.get("choices") or [])
+            current = details.get("current")
+        choices_with_current = raw_choices.copy()
+        if current and current not in choices_with_current:
+            choices_with_current.append(current)
         updates.append(
             gr.update(
-                choices=list(choices),
+                choices=choices_with_current,
                 value=current,
-                interactive=bool(list(choices)),
+                interactive=bool(raw_choices),
             )
         )
 
